@@ -79,18 +79,12 @@ func main() {
 	log.Println("🛡️ Setting up middleware...")
 	app.Use(logger.New())         // 📝 Request logging
 	app.Use(recover.New())        // 🔄 Panic recovery
-    // 🌍 CORS configuration for all /api/* routes
-    app.Use("/api/*", cors.New(cors.Config{
-        AllowOrigins:     cfg.AllowedOrigins,
-        AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-        ExposeHeaders:    "Set-Cookie",
-        AllowCredentials: true,
-    }))
-    // 🔒 Security headers and caching policy for /api/*
-    app.Use("/api/*", middleware.APISecurityHeaders())
-    // ✅ Ensure preflight (OPTIONS) returns 204 with CORS headers
-    app.Options("/api/*", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
+    // 🌍 CORS and security headers for API routes
+    // Attach to the /api/v1 group to guarantee execution order
+    // Preflight handled within group to return 204
+    log.Println("🔧 Attaching CORS & security headers to /api/v1 group...")
+    // Group-level middleware will apply to all /api/v1/* endpoints
+    // (we also add a global OPTIONS handler on the group for preflight)
 	log.Println("✅ Middleware configured")
 
 	// 👥 Initialize Customers Domain (needed for auth service)
@@ -118,9 +112,19 @@ func main() {
 	authHandler := auth.NewHandler(authService)
 	log.Println("✅ Authentication domain initialized")
 
-	// 🛣️ API Routes Setup
-	log.Println("🛣️ Setting up API routes...")
-	api := app.Group("/api/v1")
+    // 🛣️ API Routes Setup
+    log.Println("🛣️ Setting up API routes...")
+    api := app.Group("/api/v1")
+    // Attach CORS & security headers to this group
+    api.Use(cors.New(cors.Config{
+        AllowOrigins:     cfg.AllowedOrigins,
+        AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+        ExposeHeaders:    "Set-Cookie",
+        AllowCredentials: true,
+    }))
+    api.Use(middleware.APISecurityHeaders())
+    api.Options("/*", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 
 	// Add base API info endpoint
 	api.Get("/", func(c *fiber.Ctx) error {
