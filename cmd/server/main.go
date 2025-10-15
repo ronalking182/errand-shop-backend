@@ -35,7 +35,29 @@ import (
 type tempPaymentService struct{}
 
 func (t *tempPaymentService) InitializePayment(req payments.CreatePaymentRequest, customerID uint) (*payments.PaymentInitResponse, error) {
-	return nil, fmt.Errorf("payment service not yet initialized")
+    return nil, fmt.Errorf("payment service not yet initialized")
+}
+
+// Allowed origins list and helpers
+func allowedOrigins() string {
+    return strings.Join([]string{
+        "https://v0-errand-shop-dashboard.vercel.app",
+        "https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app",
+        "https://v0-errand-shop-dashboard-jcjvf4fer-ronalking182s-projects.vercel.app",
+        "http://localhost:5173",
+    }, ",")
+}
+
+func isAllowedOrigin(origin string) bool {
+    if origin == "" {
+        return false
+    }
+    for _, o := range strings.Split(allowedOrigins(), ",") {
+        if strings.TrimSpace(o) == origin {
+            return true
+        }
+    }
+    return false
 }
 
 func main() {
@@ -90,8 +112,18 @@ func main() {
         ExposeHeaders:    "Set-Cookie",
         AllowCredentials: true,
     }))
-    // Passthrough catch-all OPTIONS so CORS attaches headers, empty body 204
+    // Passthrough catch-all OPTIONS so CORS attaches headers; also synthesize
+    // standard CORS headers if needed for preflight requests.
     app.Options("/*", func(c *fiber.Ctx) error {
+        origin := c.Get("Origin")
+        if isAllowedOrigin(origin) {
+            c.Set("Access-Control-Allow-Origin", origin)
+            c.Set("Vary", "Origin")
+            c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+            c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+            c.Set("Access-Control-Allow-Credentials", "true")
+            c.Set("Access-Control-Expose-Headers", "Set-Cookie")
+        }
         return c.SendStatus(fiber.StatusNoContent)
     })
 
