@@ -238,6 +238,24 @@ func main() {
 		})
 	})
 
+    // Diagnostic: force-set ACAO from handler to validate edge behavior
+    api.Get("/cors-test", func(c *fiber.Ctx) error {
+        origin := c.Get("Origin")
+        if isAllowedOrigin(origin) {
+            c.Set("Access-Control-Allow-Origin", origin)
+            c.Set("Access-Control-Allow-Credentials", "true")
+            existingVary := string(c.Response().Header.Peek("Vary"))
+            if !strings.Contains(existingVary, "Origin") {
+                if existingVary == "" {
+                    c.Set("Vary", "Origin")
+                } else {
+                    c.Set("Vary", existingVary+", Origin")
+                }
+            }
+        }
+        return c.SendString("cors ok")
+    })
+
 	// 🌐 Public Authentication Routes (No JWT Required)
 	log.Println("🌐 Configuring public auth routes...")
 	authRoutes := api.Group("/auth")
