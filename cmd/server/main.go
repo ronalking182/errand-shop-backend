@@ -108,9 +108,10 @@ func main() {
             c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
             c.Set("Access-Control-Max-Age", "600")
             c.Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+            // Return a non-empty body to avoid certain edge/proxy normalizers
+            // from converting 200 responses with empty body into 204 and stripping headers.
             c.Set("Content-Type", "text/plain; charset=utf-8")
-            c.Set("Content-Length", "0")
-            return c.Status(fiber.StatusOK).Send(nil)
+            return c.Status(fiber.StatusOK).SendString("ok")
         }
         // Disallowed origin: 403 with Vary: Origin
         c.Set("Vary", "Origin")
