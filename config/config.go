@@ -59,10 +59,14 @@ func LoadConfig() *Config {
 		log.Fatal("RESEND_API_KEY is missing!")
 	}
 
-	allowedOrigins := os.Getenv("AllowedOrigins")
-	if allowedOrigins == "" {
-		log.Fatal("AllowedOrigins url is missing")
-	}
+    // Support both AllowedOrigins and ALLOWED_ORIGINS env names
+    allowedOrigins := os.Getenv("AllowedOrigins")
+    if allowedOrigins == "" {
+        allowedOrigins = os.Getenv("ALLOWED_ORIGINS")
+    }
+    if allowedOrigins == "" {
+        log.Fatal("AllowedOrigins url is missing")
+    }
 
 	versionStr := os.Getenv("VERSION")
 	if versionStr == "" {
