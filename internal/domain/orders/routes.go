@@ -33,9 +33,10 @@ func SetupRoutes(app *fiber.App, cfg *config.Config, orderHandler *Handler, cart
 	admin := api.Group("/admin", middleware.JWTMiddleware(cfg), middleware.AdminMiddleware())
 	adminOrders := admin.Group("/orders")
 	adminOrders.Get("/", orderHandler.AdminList)
+	// Register static route before dynamic :id to prevent conflicts
+	adminOrders.Get("/stats", orderHandler.GetStats)
 	adminOrders.Get("/:id", orderHandler.AdminGet)
 	adminOrders.Put("/:id/status", orderHandler.AdminUpdateStatus)
 	adminOrders.Put("/:id/payment-status", orderHandler.AdminUpdatePaymentStatus)
 	adminOrders.Put("/:id/cancel", orderHandler.AdminCancelOrder)
-	adminOrders.Get("/stats", orderHandler.GetStats)
 }

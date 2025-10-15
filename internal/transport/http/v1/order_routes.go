@@ -16,12 +16,13 @@ func MountOrderRoutes(r fiber.Router, h *orders.Handler) {
 
 // Admin order routes
 func MountAdminOrderRoutes(r fiber.Router, h *orders.Handler) {
-	// Order management
-	r.Get("/orders", h.AdminList)
-	r.Get("/orders/:id", h.AdminGet)
-	r.Put("/orders/:id/status", h.AdminUpdateStatus)
-	r.Put("/orders/:id/payment-status", h.AdminUpdatePaymentStatus)
+    // Order management
+    r.Get("/orders", h.AdminList)
+    // Register stats before :id to avoid dynamic capture of 'stats'
+    r.Get("/orders/stats", h.GetStats)
+    r.Get("/orders/:id", h.AdminGet)
+    r.Put("/orders/:id/status", h.AdminUpdateStatus)
+    r.Put("/orders/:id/payment-status", h.AdminUpdatePaymentStatus)
 
-	// Statistics
-	r.Get("/orders/stats", h.GetStats)
+    // Statistics (already registered above)
 }
