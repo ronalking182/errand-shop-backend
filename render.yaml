@@ -22,9 +22,9 @@ services:
       - key: APP_ENV
         value: production
       - key: AllowedOrigins
-        value: https://dashboard.errandshop.ng,https://app.errandshop.ng
+        value: https://dashboard.errandshop.ng,https://app.errandshop.ng,https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app,https://v0-errand-shop-dashboard-kje3prhp7-ronalking182s-projects.vercel.app
       - key: ALLOWED_ORIGINS
-        value: https://dashboard.errandshop.ng,https://app.errandshop.ng
+        value: https://dashboard.errandshop.ng,https://app.errandshop.ng,https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app,https://v0-errand-shop-dashboard-kje3prhp7-ronalking182s-projects.vercel.app
       - key: VERSION
         value: "1"
 

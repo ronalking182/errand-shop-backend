@@ -79,12 +79,12 @@ func main() {
 	log.Println("🛡️ Setting up middleware...")
 	app.Use(logger.New())         // 📝 Request logging
 	app.Use(recover.New())        // 🔄 Panic recovery
-	app.Use(cors.New(cors.Config{ // 🌍 CORS configuration
-		AllowOrigins:     "*",
-		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders:     "*",
-		AllowCredentials: false, // ✅ Disabled for wildcard origins
-	}))
+    app.Use(cors.New(cors.Config{ // 🌍 CORS configuration
+        AllowOrigins:     cfg.AllowedOrigins,
+        AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
+        AllowHeaders:     "*",
+        AllowCredentials: false,
+    }))
 	log.Println("✅ Middleware configured")
 
 	// 👥 Initialize Customers Domain (needed for auth service)
