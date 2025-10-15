@@ -111,25 +111,38 @@ func main() {
         AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
         ExposeHeaders:    "Set-Cookie",
         AllowCredentials: true,
+        MaxAge:           600,
     }))
-    // Pre-injection: ensure ACAO and credentials are present before handlers run
+    // Pre-injection: ensure ACAO/credentials present for /api/* non-OPTIONS if missing
     app.Use(func(c *fiber.Ctx) error {
         origin := c.Get("Origin")
-        if isAllowedOrigin(origin) {
-            c.Set("Access-Control-Allow-Origin", origin)
-            c.Set("Access-Control-Allow-Credentials", "true")
-            c.Set("Vary", "Origin")
+        if strings.HasPrefix(c.Path(), "/api/") && c.Method() != fiber.MethodOptions && isAllowedOrigin(origin) {
+            if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
+                c.Set("Access-Control-Allow-Origin", origin)
+            }
+            if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
+                c.Set("Access-Control-Allow-Credentials", "true")
+            }
+            // Append Vary: Origin if missing
+            existingVary := string(c.Response().Header.Peek("Vary"))
+            if !strings.Contains(existingVary, "Origin") {
+                if existingVary == "" {
+                    c.Set("Vary", "Origin")
+                } else {
+                    c.Set("Vary", existingVary+", Origin")
+                }
+            }
         }
         return c.Next()
     })
-    // Fallback: after next handlers run, ensure Access-Control-* headers exist
+    // Fallback: after handlers run, append ACAO/credentials/Vary for non-OPTIONS /api/* if missing
     app.Use(func(c *fiber.Ctx) error {
         // proceed through handlers first
         if err := c.Next(); err != nil {
             return err
         }
         origin := c.Get("Origin")
-        if isAllowedOrigin(origin) {
+        if strings.HasPrefix(c.Path(), "/api/") && c.Method() != fiber.MethodOptions && isAllowedOrigin(origin) {
             // Preserve existing headers; only set if missing
             if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
                 c.Set("Access-Control-Allow-Origin", origin)
@@ -137,35 +150,35 @@ func main() {
             if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
                 c.Set("Access-Control-Allow-Credentials", "true")
             }
-            if c.Method() == fiber.MethodOptions {
-                if len(c.Response().Header.Peek("Access-Control-Allow-Methods")) == 0 {
-                    c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-                }
-                if len(c.Response().Header.Peek("Access-Control-Allow-Headers")) == 0 {
-                    c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-                }
-                if len(c.Response().Header.Peek("Access-Control-Expose-Headers")) == 0 {
-                    c.Set("Access-Control-Expose-Headers", "Set-Cookie")
+            // Append Vary: Origin if missing
+            existingVary := string(c.Response().Header.Peek("Vary"))
+            if !strings.Contains(existingVary, "Origin") {
+                if existingVary == "" {
+                    c.Set("Vary", "Origin")
+                } else {
+                    c.Set("Vary", existingVary+", Origin")
                 }
             }
-            // Always vary on Origin
-            c.Set("Vary", "Origin")
         }
         return nil
     })
-    // Passthrough catch-all OPTIONS so CORS attaches headers; also synthesize
-    // standard CORS headers if needed for preflight requests.
-    app.Options("/*", func(c *fiber.Ctx) error {
+    // OPTIONS synthesis for /api/*: reflect ACAO on allowed origins, no proxy, 200
+    app.Options("/api/*", func(c *fiber.Ctx) error {
         origin := c.Get("Origin")
         if isAllowedOrigin(origin) {
             c.Set("Access-Control-Allow-Origin", origin)
-            c.Set("Vary", "Origin")
+            c.Set("Access-Control-Allow-Credentials", "true")
             c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
             c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-            c.Set("Access-Control-Allow-Credentials", "true")
-            c.Set("Access-Control-Expose-Headers", "Set-Cookie")
+            c.Set("Access-Control-Max-Age", "600")
+            c.Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+            c.Set("Content-Type", "text/plain; charset=utf-8")
+            c.Set("Content-Length", "0")
+            return c.Status(fiber.StatusOK).Send(nil)
         }
-        return c.SendStatus(fiber.StatusNoContent)
+        // Disallowed origin: 403 with Vary: Origin
+        c.Set("Vary", "Origin")
+        return c.SendStatus(fiber.StatusForbidden)
     })
 
     // 🛡️ Additional middleware
