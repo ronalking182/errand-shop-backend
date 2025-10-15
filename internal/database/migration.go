@@ -427,6 +427,55 @@ func getMigrations() []*gormigrate.Migration {
                 return nil
             },
         },
+
+        // Seed superadmin: Errandshop3js@gmail.com (one-time, idempotent)
+        {
+            ID: "0020_seed_superadmin_errandshop3js",
+            Migrate: func(tx *gorm.DB) error {
+                log.Println("Seeding superadmin user: Errandshop3js@gmail.com ...")
+
+                // Check if the user already exists
+                var count int64
+                if err := tx.Model(&models.User{}).
+                    Where("email = ?", "Errandshop3js@gmail.com").
+                    Count(&count).Error; err != nil {
+                    return err
+                }
+
+                if count > 0 {
+                    log.Println("Superadmin already exists, skipping seed.")
+                    return nil
+                }
+
+                // Create the superadmin (password hashed by BeforeCreate hook)
+                user := &models.User{
+                    FirstName:   "Michelle",
+                    LastName:    "Onwuaso",
+                    Name:        "Michelle Onwuaso",
+                    Email:       "Errandshop3js@gmail.com",
+                    Password:    "Admin123!",
+                    Phone:       "08144611443",
+                    Role:        "superadmin",
+                    Permissions: []string{"*"},
+                    Status:      "active",
+                    IsVerified:  true,
+                    ForceReset:  false,
+                    CreatedAt:   time.Now(),
+                    UpdatedAt:   time.Now(),
+                }
+
+                if err := tx.Create(user).Error; err != nil {
+                    return err
+                }
+
+                log.Println("✅ Superadmin seeded: Errandshop3js@gmail.com")
+                return nil
+            },
+            Rollback: func(tx *gorm.DB) error {
+                log.Println("Removing seeded superadmin: Errandshop3js@gmail.com ...")
+                return tx.Where("email = ?", "Errandshop3js@gmail.com").Delete(&models.User{}).Error
+            },
+        },
     }
 }
 
