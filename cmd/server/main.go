@@ -112,6 +112,10 @@ func main() {
         ExposeHeaders:    "Set-Cookie",
         AllowCredentials: true,
         MaxAge:           600,
+        // Skip handling OPTIONS here so our /api/* synthesis route runs
+        Next: func(c *fiber.Ctx) bool {
+            return c.Method() == fiber.MethodOptions
+        },
     }))
     // Pre-injection: ensure ACAO/credentials present for /api/* non-OPTIONS if missing
     app.Use(func(c *fiber.Ctx) error {
