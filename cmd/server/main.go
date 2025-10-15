@@ -161,6 +161,55 @@ func main() {
 	adminRoutes.Put("/users/:id/permissions", authHandler.UpdateUserPermissions)   // 🔐 Update permissions
 	adminRoutes.Put("/users/:id/force-reset", authHandler.ForcePasswordReset)      // 🔒 Force password reset
 
+	// 🔍 Admin-only DB introspection endpoint for incident diagnostics
+	adminRoutes.Get("/system/db", func(c *fiber.Ctx) error {
+		var dbName string
+		var dbUser string
+		var searchPath string
+		var publicOrders string
+		var unqualifiedOrders string
+		var migrationsCount int64
+		var migrationsError string
+		var pgcryptoInstalled bool
+
+		// Collect diagnostics
+		query := func(q string, dest interface{}) error {
+			res := db.Raw(q).Scan(dest)
+			return res.Error
+		}
+
+		_ = query("SELECT current_database()", &dbName)
+		_ = query("SELECT current_user", &dbUser)
+		_ = query("SHOW search_path", &searchPath)
+		_ = query("SELECT to_regclass('public.orders')", &publicOrders)
+		_ = query("SELECT to_regclass('orders')", &unqualifiedOrders)
+
+		// gorm_migrations count (optional, may be missing)
+		if res := db.Raw("SELECT COUNT(*) FROM gorm_migrations").Scan(&migrationsCount); res.Error != nil {
+			migrationsError = res.Error.Error()
+		}
+
+		// pgcrypto extension presence
+		if res := db.Raw("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto')").Scan(&pgcryptoInstalled); res.Error != nil {
+			// keep default false; include error in response for visibility
+			if migrationsError == "" {
+				migrationsError = res.Error.Error()
+			} else {
+				migrationsError = migrationsError + "; " + res.Error.Error()
+			}
+		}
+
+		return c.JSON(fiber.Map{
+			"db_name":                 dbName,
+			"db_user":                 dbUser,
+			"search_path":            searchPath,
+			"to_regclass":            fiber.Map{"public.orders": publicOrders, "orders": unqualifiedOrders},
+			"gorm_migrations_count":  migrationsCount,
+			"gorm_migrations_error":  migrationsError,
+			"pgcrypto_installed":     pgcryptoInstalled,
+		})
+	})
+
 	// ❤️ Health Check Endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "message": "🟢 Server is healthy"})

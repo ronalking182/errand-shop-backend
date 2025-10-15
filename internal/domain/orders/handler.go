@@ -291,11 +291,15 @@ func (h *Handler) AdminList(c *fiber.Ctx) error {
 }
 
 func (h *Handler) AdminGet(c *fiber.Ctx) error {
-	idStr := c.Params("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid order ID", err)
-	}
+    idStr := c.Params("id")
+    // If the dynamic :id route captured the "stats" path segment, delegate to stats handler
+    if idStr == "stats" {
+        return h.GetStats(c)
+    }
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        return h.errorResponse(c, fiber.StatusBadRequest, "Invalid order ID", err)
+    }
 
 	order, err := h.svc.AdminGet(c.Context(), id)
 	if err != nil {

@@ -1,12 +1,13 @@
 package database
 
 import (
-	"log"
-	"time"
+    "log"
+    "time"
+    "database/sql"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+    "gorm.io/gorm/logger"
 )
 
 // DB is the global database connection instance
@@ -19,11 +20,11 @@ var DB *gorm.DB
 // Returns:
 //   - *gorm.DB: The database connection instance
 func ConnectDB(dsn string) *gorm.DB {
-	var err error
+    var err error
 
-	// =============================================
-	// DATABASE CONNECTION SETUP
-	// =============================================
+    // =============================================
+    // DATABASE CONNECTION SETUP
+    // =============================================
 
 	// Configure GORM for optimal performance
 	gormConfig := &gorm.Config{
@@ -55,22 +56,63 @@ func ConnectDB(dsn string) *gorm.DB {
 		log.Fatal("Failed to get underlying DB instance:", err)
 	}
 
-	// Configure connection pool settings
-	sqlDB.SetMaxIdleConns(10)           // Maximum idle connections
-	sqlDB.SetMaxOpenConns(100)          // Maximum open connections
-	sqlDB.SetConnMaxLifetime(time.Hour) // Maximum connection lifetime
+    // Configure connection pool settings
+    sqlDB.SetMaxIdleConns(10)           // Maximum idle connections
+    sqlDB.SetMaxOpenConns(100)          // Maximum open connections
+    sqlDB.SetConnMaxLifetime(time.Hour) // Maximum connection lifetime
 
-	// =============================================
-	// MIGRATION EXECUTION
-	// =============================================
+    // =============================================
+    // DB INTROSPECTION (diagnostics)
+    // =============================================
+    // Log current database, user, and search_path to aid triage in production
+    func() {
+        // current_database(), current_user
+        var currentDB, currentUser string
+        row := DB.Raw("select current_database(), current_user").Row()
+        if err := row.Scan(&currentDB, &currentUser); err == nil {
+            log.Printf("ℹ️ Connected to DB='%s' as user='%s'", currentDB, currentUser)
+        } else {
+            log.Printf("⚠️ Failed to read current_database/current_user: %v", err)
+        }
 
-	// Run database migrations
-	if err := RunMigrations(DB); err != nil {
-		log.Fatal("Database migrations failed:", err)
-	}
+        // search_path
+        var searchPath string
+        row = DB.Raw("show search_path").Row()
+        if err := row.Scan(&searchPath); err == nil {
+            log.Printf("ℹ️ search_path='%s'", searchPath)
+        } else {
+            log.Printf("⚠️ Failed to read search_path: %v", err)
+        }
 
-	log.Println("✅ Database connection established and migrations completed")
-	return DB
+        // Check orders table visibility (public and default schema resolution)
+        var publicOrders, defaultOrders sql.NullString
+        row = DB.Raw("select to_regclass('public.orders'), to_regclass('orders')").Row()
+        if err := row.Scan(&publicOrders, &defaultOrders); err == nil {
+            log.Printf("ℹ️ to_regclass public.orders='%v', orders='%v'", publicOrders.String, defaultOrders.String)
+        } else {
+            log.Printf("⚠️ Failed to check to_regclass for orders: %v", err)
+        }
+
+        // Count applied gorm migrations (table name: gorm_migrations)
+        var migCount int
+        if err := DB.Raw("select count(*) from gorm_migrations").Scan(&migCount).Error; err == nil {
+            log.Printf("ℹ️ gorm_migrations count=%d", migCount)
+        } else {
+            log.Printf("⚠️ gorm_migrations table not readable: %v", err)
+        }
+    }()
+
+    // =============================================
+    // MIGRATION EXECUTION
+    // =============================================
+
+    // Run database migrations
+    if err := RunMigrations(DB); err != nil {
+        log.Fatal("Database migrations failed:", err)
+    }
+
+    log.Println("✅ Database connection established and migrations completed")
+    return DB
 }
 
 // PingDB checks if the database connection is alive
