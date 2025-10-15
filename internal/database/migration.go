@@ -415,9 +415,10 @@ func getMigrations() []*gormigrate.Migration {
                 }
 
                 // Optional extras — include ONLY if these types exist in the codebase:
-                // _ = tx.AutoMigrate(&orders.Cart{})
-                // _ = tx.AutoMigrate(&orders.CartItem{})
-                // _ = tx.AutoMigrate(&orders.OrderStatusHistory{})
+                // These structs exist in the codebase, so ensure their tables too
+                _ = tx.AutoMigrate(&orders.Cart{})
+                _ = tx.AutoMigrate(&orders.CartItem{})
+                _ = tx.AutoMigrate(&orders.OrderStatusHistory{})
 
                 return nil
             },
