@@ -79,12 +79,18 @@ func main() {
 	log.Println("🛡️ Setting up middleware...")
 	app.Use(logger.New())         // 📝 Request logging
 	app.Use(recover.New())        // 🔄 Panic recovery
-    app.Use(cors.New(cors.Config{ // 🌍 CORS configuration
-        AllowOrigins:     cfg.AllowedOrigins,
-        AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
-        AllowHeaders:     "*",
-        AllowCredentials: false,
+    // 🌍 CORS configuration for all /api/* routes
+    app.Use("/api", cors.New(cors.Config{
+        AllowOrigins:     "https://v0-errand-shop-dashboard.vercel.app,https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app,https://v0-errand-shop-dashboard-jcjvf4fer-ronalking182s-projects.vercel.app,http://localhost:5173",
+        AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+        ExposeHeaders:    "Set-Cookie",
+        AllowCredentials: true,
     }))
+    // 🔒 Security headers and caching policy for /api/*
+    app.Use("/api", middleware.APISecurityHeaders())
+    // ✅ Ensure preflight (OPTIONS) returns 204 with CORS headers
+    app.Options("/api/*", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 	log.Println("✅ Middleware configured")
 
 	// 👥 Initialize Customers Domain (needed for auth service)
