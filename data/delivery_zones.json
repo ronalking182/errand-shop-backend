@@ -1,0 +1,10 @@
+[
+  {"zoneId":1,"price":4000,"locations":["Katampe","Dawaki","Idu","Idu Karimo","Dakwo","Kabusa Garden"]},
+  {"zoneId":2,"price":2500,"locations":["Wuye","Utako","Wuse Zone 1","Wuse Zone 2","Wuse Zone 3","Wuse Zone 4","Wuse Zone 5","Wuse Zone 6"]},
+  {"zoneId":3,"price":3000,"locations":["Jabi","Kado","Wuse 2","Garki","Maitama","Games Village"]},
+  {"zoneId":4,"price":3500,"locations":["Jahi","Lifecamp","Life Camp","Garki 2","Gaduwa"]},
+  {"zoneId":5,"price":4500,"locations":["Gwarinpa 6th Avenue","Lugbe Airport Road","Apo","Asokoro"]},
+  {"zoneId":6,"price":5000,"locations":["River Park Lugbe","Ipent 3 Lugbe","Lokogoma"]},
+  {"zoneId":7,"price":5500,"locations":["Dutse"]},
+  {"zoneId":8,"price":6000,"locations":["Karsana","Mpape"]}
+]

@@ -1,0 +1,26 @@
+# air.toml – for Go Fiber project
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o tmp/main ./cmd/server"
+  bin = "tmp/main"
+  full_bin = true
+  delay = 1000
+  exclude_dir = ["node_modules", "frontend", "vendor", "tmp"]
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  exclude_file = []
+  follow_symlink = false
+  log = "build-errors.log"
+
+[color]
+  main = "yellow"
+  watcher = "cyan"
+  build = "green"
+  runner = "magenta"
+  error = "red"
+  success = "green"
+
+[log]
+  time = true

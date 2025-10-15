@@ -1,0 +1,532 @@
+### Errand Shop API Test Suite
+### Use with VS Code REST Client extension or Bruno
+### Set variables in tests/.env or use the @baseUrl variable below
+
+@baseUrl = {{$dotenv BASE_URL}}
+@userEmail = {{$dotenv USER_EMAIL}}
+@userPassword = {{$dotenv USER_PASSWORD}}
+@adminEmail = {{$dotenv ADMIN_EMAIL}}
+@adminPassword = {{$dotenv ADMIN_PASSWORD}}
+
+### Variables (will be populated during test execution)
+# @userToken = 
+# @adminToken = 
+# @customerId = 
+# @addressId = 
+# @productId = 
+# @orderId = 
+# @paymentId = 
+# @deliveryId = 
+
+###############################################################################
+### 1. AUTHENTICATION
+###############################################################################
+
+### 1.1 User Login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### 1.2 Admin Login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 1.3 Get Current User Info (User)
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{userToken}}
+
+### 1.4 Get Current User Info (Admin)
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 2. CUSTOMER MANAGEMENT
+###############################################################################
+
+### 2.1 Create Customer Profile
+POST {{baseUrl}}/api/v1/customers
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "firstName": "Test",
+  "lastName": "User",
+  "phone": "+1234567890"
+}
+
+### 2.2 Get Customer Profile
+GET {{baseUrl}}/api/v1/customers/profile
+Authorization: Bearer {{userToken}}
+
+### 2.3 Update Customer Profile
+PUT {{baseUrl}}/api/v1/customers/profile
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "firstName": "Updated Test",
+  "lastName": "User",
+  "phone": "+1234567890"
+}
+
+###############################################################################
+### 3. ADDRESS MANAGEMENT
+###############################################################################
+
+### 3.1 Create Address
+POST {{baseUrl}}/api/v1/customers/addresses
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "street": "123 Test Street",
+  "city": "Test City",
+  "state": "Test State",
+  "country": "Test Country",
+  "postalCode": "12345",
+  "isDefault": true
+}
+
+### 3.2 Get Customer Addresses
+GET {{baseUrl}}/api/v1/customers/addresses
+Authorization: Bearer {{userToken}}
+
+### 3.3 Update Address
+PUT {{baseUrl}}/api/v1/customers/addresses/{{addressId}}
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "street": "456 Updated Street",
+  "city": "Updated City",
+  "state": "Updated State",
+  "country": "Updated Country",
+  "postalCode": "54321",
+  "isDefault": true
+}
+
+### 3.4 Set Default Address
+PUT {{baseUrl}}/api/v1/customers/addresses/{{addressId}}/default
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{}
+
+### 3.5 Delete Address
+DELETE {{baseUrl}}/api/v1/customers/addresses/{{addressId}}
+Authorization: Bearer {{userToken}}
+
+###############################################################################
+### 4. PRODUCT MANAGEMENT
+###############################################################################
+
+### 4.1 Get All Products
+GET {{baseUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+### 4.2 Get Product by ID
+GET {{baseUrl}}/api/v1/products/{{productId}}
+Authorization: Bearer {{userToken}}
+
+### 4.3 Get Product Categories
+GET {{baseUrl}}/api/v1/products/categories
+Authorization: Bearer {{userToken}}
+
+### 4.4 Get Low Stock Products (Admin)
+GET {{baseUrl}}/api/v1/admin/products/low-stock
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 5. ORDER MANAGEMENT
+###############################################################################
+
+### 5.1 Create Order
+POST {{baseUrl}}/api/v1/orders
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "items": [
+    {
+      "productId": {{productId}},
+      "quantity": 2
+    }
+  ],
+  "addressId": {{addressId}}
+}
+
+### 5.2 Get User Orders
+GET {{baseUrl}}/api/v1/orders
+Authorization: Bearer {{userToken}}
+
+### 5.3 Get Order by ID
+GET {{baseUrl}}/api/v1/orders/{{orderId}}
+Authorization: Bearer {{userToken}}
+
+### 5.4 Update Order Status (User)
+PUT {{baseUrl}}/api/v1/orders/{{orderId}}/status
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "status": "cancelled"
+}
+
+### 5.5 Get All Orders (Admin)
+GET {{baseUrl}}/api/v1/admin/orders
+Authorization: Bearer {{adminToken}}
+
+### 5.6 Get Order by ID (Admin)
+GET {{baseUrl}}/api/v1/admin/orders/{{orderId}}
+Authorization: Bearer {{adminToken}}
+
+### 5.7 Update Order Status (Admin)
+PUT {{baseUrl}}/api/v1/admin/orders/{{orderId}}/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "processing"
+}
+
+### 5.8 Update Payment Status (Admin)
+PUT {{baseUrl}}/api/v1/admin/orders/{{orderId}}/payment-status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "paymentStatus": "paid"
+}
+
+### 5.9 Get Order Statistics (Admin)
+GET {{baseUrl}}/api/v1/admin/orders/stats
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 6. PAYMENT MANAGEMENT
+###############################################################################
+
+### 6.1 Initialize Payment
+POST {{baseUrl}}/api/v1/payments/initialize
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "orderId": {{orderId}},
+  "provider": "flutterwave"
+}
+
+### 6.2 Process Payment
+POST {{baseUrl}}/api/v1/payments/process
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "paymentId": {{paymentId}},
+  "transactionRef": "test_ref_123",
+  "status": "success"
+}
+
+### 6.3 Get Payment by ID
+GET {{baseUrl}}/api/v1/payments/{{paymentId}}
+Authorization: Bearer {{userToken}}
+
+### 6.4 Get Payment by Transaction Reference
+GET {{baseUrl}}/api/v1/payments/transaction/test_ref_123
+Authorization: Bearer {{userToken}}
+
+### 6.5 Initiate Refund
+POST {{baseUrl}}/api/v1/payments/{{paymentId}}/refund
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "amount": 100.00,
+  "reason": "Customer request"
+}
+
+### 6.6 Get Payment Refunds
+GET {{baseUrl}}/api/v1/payments/{{paymentId}}/refunds
+Authorization: Bearer {{userToken}}
+
+### 6.7 Get All Payments (Admin)
+GET {{baseUrl}}/api/v1/admin/payments
+Authorization: Bearer {{adminToken}}
+
+### 6.8 Get Payment Statistics (Admin)
+GET {{baseUrl}}/api/v1/admin/payments/stats
+Authorization: Bearer {{adminToken}}
+
+### 6.9 Payment Webhook (Simulate)
+POST {{baseUrl}}/api/v1/payments/webhook
+Content-Type: application/json
+
+{
+  "event": "payment.success",
+  "data": {
+    "transactionRef": "test_ref_123",
+    "status": "success",
+    "amount": 100.00
+  }
+}
+
+###############################################################################
+### 7. DELIVERY MANAGEMENT
+###############################################################################
+
+### 7.1 Create Delivery (Admin)
+POST {{baseUrl}}/api/v1/delivery
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "orderId": {{orderId}}
+}
+
+### 7.2 Get Delivery by ID
+GET {{baseUrl}}/api/v1/delivery/{{deliveryId}}
+Authorization: Bearer {{adminToken}}
+
+### 7.3 Update Delivery Status
+PUT {{baseUrl}}/api/v1/delivery/{{deliveryId}}/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "in_transit"
+}
+
+### 7.4 Add Tracking Update
+POST {{baseUrl}}/api/v1/delivery/{{deliveryId}}/tracking
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "picked_up",
+  "location": "Warehouse",
+  "notes": "Package picked up from warehouse"
+}
+
+### 7.5 Track Delivery by Tracking Number
+GET {{baseUrl}}/api/v1/delivery/track/TRACK123456
+Authorization: Bearer {{userToken}}
+
+### 7.6 Get Available Drivers
+GET {{baseUrl}}/api/v1/delivery/drivers/available
+Authorization: Bearer {{adminToken}}
+
+### 7.7 Get Delivery Statistics (Admin)
+GET {{baseUrl}}/api/v1/admin/delivery/stats
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 8. ANALYTICS
+###############################################################################
+
+### 8.1 Get Dashboard Analytics
+GET {{baseUrl}}/api/v1/analytics/dashboard
+Authorization: Bearer {{adminToken}}
+
+### 8.2 Get Sales Report
+GET {{baseUrl}}/api/v1/analytics/sales-report
+Authorization: Bearer {{adminToken}}
+
+### 8.3 Get Customer Report
+GET {{baseUrl}}/api/v1/analytics/customer-report
+Authorization: Bearer {{adminToken}}
+
+### 8.4 Get Product Report
+GET {{baseUrl}}/api/v1/analytics/product-report
+Authorization: Bearer {{adminToken}}
+
+### 8.5 Get Order Report
+GET {{baseUrl}}/api/v1/analytics/order-report
+Authorization: Bearer {{adminToken}}
+
+### 8.6 Get Delivery Report
+GET {{baseUrl}}/api/v1/analytics/delivery-report
+Authorization: Bearer {{adminToken}}
+
+### 8.7 Get Payment Report
+GET {{baseUrl}}/api/v1/analytics/payment-report
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 9. NOTIFICATIONS
+###############################################################################
+
+### 9.1 Get User Notifications
+GET {{baseUrl}}/api/notifications
+Authorization: Bearer {{userToken}}
+
+### 9.2 Mark Notification as Read
+PUT {{baseUrl}}/api/notifications/1/read
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{}
+
+### 9.3 Mark All Notifications as Read
+PUT {{baseUrl}}/api/notifications/read-all
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{}
+
+### 9.4 Register Push Token
+POST {{baseUrl}}/api/notifications/push-token
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "token": "test_push_token_123",
+  "platform": "ios"
+}
+
+### 9.5 Send Broadcast Notification (Admin)
+POST {{baseUrl}}/api/admin/notifications/broadcast
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "System Maintenance",
+  "message": "The system will be under maintenance from 2-4 AM UTC",
+  "type": "system"
+}
+
+### 9.6 Get Notification Templates (Admin)
+GET {{baseUrl}}/api/admin/notifications/templates
+Authorization: Bearer {{adminToken}}
+
+### 9.7 Get Notification Statistics (Admin)
+GET {{baseUrl}}/api/admin/notifications/stats
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 10. SYSTEM ADMINISTRATION
+###############################################################################
+
+### 10.1 Get System Health
+GET {{baseUrl}}/api/v1/admin/system/health
+Authorization: Bearer {{adminToken}}
+
+### 10.2 Get System Configuration
+GET {{baseUrl}}/api/v1/admin/system/config
+Authorization: Bearer {{adminToken}}
+
+### 10.3 Update System Configuration
+PUT {{baseUrl}}/api/v1/admin/system/config
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "maintenanceMode": false,
+  "maxOrdersPerDay": 1000,
+  "allowRegistration": true
+}
+
+### 10.4 Get System Settings
+GET {{baseUrl}}/api/v1/admin/system/settings
+Authorization: Bearer {{adminToken}}
+
+### 10.5 Get Specific Setting
+GET {{baseUrl}}/api/v1/admin/system/settings/maintenance_mode
+Authorization: Bearer {{adminToken}}
+
+### 10.6 Update Specific Setting
+PUT {{baseUrl}}/api/v1/admin/system/settings/maintenance_mode
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "value": false
+}
+
+### 10.7 Get System Statistics
+GET {{baseUrl}}/api/v1/admin/system/stats
+Authorization: Bearer {{adminToken}}
+
+### 10.8 Get Audit Logs
+GET {{baseUrl}}/api/v1/admin/system/audit-logs
+Authorization: Bearer {{adminToken}}
+
+### 10.9 Cleanup Audit Logs
+DELETE {{baseUrl}}/api/v1/admin/system/audit-logs/cleanup
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+### 11. HEALTH CHECKS
+###############################################################################
+
+### 11.1 Public Health Check
+GET {{baseUrl}}/api/v1/health
+
+### 11.2 Application Health Check
+GET {{baseUrl}}/health
+
+###############################################################################
+### 12. ADMIN USER MANAGEMENT
+###############################################################################
+
+### 12.1 Get All Users (Admin)
+GET {{baseUrl}}/api/v1/admin/users
+Authorization: Bearer {{adminToken}}
+
+### 12.2 Create User (Admin)
+POST {{baseUrl}}/api/v1/admin/users
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "email": "newuser@example.com",
+  "password": "password123",
+  "firstName": "New",
+  "lastName": "User",
+  "role": "user"
+}
+
+### 12.3 Get User by ID (Admin)
+GET {{baseUrl}}/api/v1/admin/users/1
+Authorization: Bearer {{adminToken}}
+
+### 12.4 Update User (Admin)
+PUT {{baseUrl}}/api/v1/admin/users/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "firstName": "Updated",
+  "lastName": "User",
+  "role": "user"
+}
+
+### 12.5 Update User Status (Admin)
+PATCH {{baseUrl}}/api/v1/admin/users/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "active"
+}
+
+### 12.6 Update User Permissions (Admin)
+PUT {{baseUrl}}/api/v1/admin/users/1/permissions
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "permissions": ["products:read", "orders:read"]
+}
+
+### 12.7 Delete User (Admin)
+DELETE {{baseUrl}}/api/v1/admin/users/1
+Authorization: Bearer {{adminToken}}

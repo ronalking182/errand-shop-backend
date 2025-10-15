@@ -25,7 +25,31 @@ go.work
 go.work.sum
 
 # env file
-.env
+.env*
+!.env.example
+
+# Production env
+.env.production
+
+# Firebase credentials (sensitive)
+config/firebase-credentials.json
+errand-shop-messaging-firebase-adminsdk-*.json
+
+# Local databases (sensitive)
+*.db
+
+# Build artifacts and temporary files
+tmp/
+main
+server
+errand-shop-backend
+*.log
+
+# Uploads (user-generated content)
+uploads/
+
+# Node modules
+node_modules/
 
 # Editor/IDE
 # .idea/
