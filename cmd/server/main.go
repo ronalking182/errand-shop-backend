@@ -112,6 +112,16 @@ func main() {
         ExposeHeaders:    "Set-Cookie",
         AllowCredentials: true,
     }))
+    // Pre-injection: ensure ACAO and credentials are present before handlers run
+    app.Use(func(c *fiber.Ctx) error {
+        origin := c.Get("Origin")
+        if isAllowedOrigin(origin) {
+            c.Set("Access-Control-Allow-Origin", origin)
+            c.Set("Access-Control-Allow-Credentials", "true")
+            c.Set("Vary", "Origin")
+        }
+        return c.Next()
+    })
     // Fallback: after next handlers run, ensure Access-Control-* headers exist
     app.Use(func(c *fiber.Ctx) error {
         // proceed through handlers first
