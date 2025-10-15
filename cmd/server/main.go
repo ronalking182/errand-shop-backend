@@ -98,6 +98,25 @@ func main() {
 		},
     })
 
+    // OPTIONS synthesis for /api/*: reflect ACAO on allowed origins, no proxy, 200 (placed before CORS)
+    app.Options("/api/*", func(c *fiber.Ctx) error {
+        origin := c.Get("Origin")
+        if isAllowedOrigin(origin) {
+            c.Set("Access-Control-Allow-Origin", origin)
+            c.Set("Access-Control-Allow-Credentials", "true")
+            c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+            c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+            c.Set("Access-Control-Max-Age", "600")
+            c.Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+            c.Set("Content-Type", "text/plain; charset=utf-8")
+            c.Set("Content-Length", "0")
+            return c.Status(fiber.StatusOK).Send(nil)
+        }
+        // Disallowed origin: 403 with Vary: Origin
+        c.Set("Vary", "Origin")
+        return c.SendStatus(fiber.StatusForbidden)
+    })
+
     // 🌍 CORS must be the first middleware so preflights carry headers
     log.Println("🌍 Configuring global CORS (first middleware)...")
     app.Use(cors.New(cors.Config{
@@ -165,24 +184,6 @@ func main() {
             }
         }
         return nil
-    })
-    // OPTIONS synthesis for /api/*: reflect ACAO on allowed origins, no proxy, 200
-    app.Options("/api/*", func(c *fiber.Ctx) error {
-        origin := c.Get("Origin")
-        if isAllowedOrigin(origin) {
-            c.Set("Access-Control-Allow-Origin", origin)
-            c.Set("Access-Control-Allow-Credentials", "true")
-            c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-            c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-            c.Set("Access-Control-Max-Age", "600")
-            c.Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
-            c.Set("Content-Type", "text/plain; charset=utf-8")
-            c.Set("Content-Length", "0")
-            return c.Status(fiber.StatusOK).Send(nil)
-        }
-        // Disallowed origin: 403 with Vary: Origin
-        c.Set("Vary", "Origin")
-        return c.SendStatus(fiber.StatusForbidden)
     })
 
     // 🛡️ Additional middleware
