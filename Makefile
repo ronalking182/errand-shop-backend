@@ -1,18 +1,26 @@
-run-up:
-	go run ./cmd/server/migrate/main.go up
-
-rollback:
-	go run ./cmd/server/migrate/main.go rollback
+# Database connection variables (override via environment)
+PGHOST ?= localhost
+PGPORT ?= 5432
+PGUSER ?= postgres
+PGPASSWORD ?=
+PGDATABASE ?=
 
 reset-db:
-	psql -U sabiroadadmin -c "DROP DATABASE IF EXISTS sabiroad;" -d postgres
-	psql -U sabiroadadmin -c "CREATE DATABASE sabiroad;" -d postgres
+	@if [ -z "$(PGDATABASE)" ]; then echo "❌ PGDATABASE is required. Example: PGDATABASE=errand_shop make reset-db"; exit 1; fi
+	@echo "Resetting database '$(PGDATABASE)' on $(PGHOST):$(PGPORT) as user $(PGUSER)..."
+	@PGPASSWORD="$(PGPASSWORD)" psql -h "$(PGHOST)" -p "$(PGPORT)" -U "$(PGUSER)" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$(PGDATABASE)' AND pid <> pg_backend_pid();" || true
+	@PGPASSWORD="$(PGPASSWORD)" psql -h "$(PGHOST)" -p "$(PGPORT)" -U "$(PGUSER)" -d postgres -c "DROP DATABASE IF EXISTS \"$(PGDATABASE)\";"
+	@PGPASSWORD="$(PGPASSWORD)" psql -h "$(PGHOST)" -p "$(PGPORT)" -U "$(PGUSER)" -d postgres -c "CREATE DATABASE \"$(PGDATABASE)\";"
+	@echo "✅ Database reset complete"
 
 dev:
 	air
 
 run:
 	go run ./cmd/server/main.go
+
+build-internal:
+	go build ./internal/...
 
 # Test targets
 test-smoke:

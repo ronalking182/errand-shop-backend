@@ -1,14 +1,15 @@
 package orders
 
 import (
-	"errors"
-	"fmt"
-	"log"
+    "errors"
+    "fmt"
+    "log"
+    "strings"
 
-	"github.com/go-playground/validator/v10"
-	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
-	"gorm.io/gorm"
+    "github.com/go-playground/validator/v10"
+    "github.com/gofiber/fiber/v2"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
 )
 
 type Handler struct {
@@ -142,12 +143,14 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		return h.errorResponse(c, fiber.StatusBadRequest, "Validation failed", err)
 	}
 
-
-
 	order, err := h.svc.CreateWithPayment(c.Context(), userID, req)
 	if err != nil {
 		if err.Error() == "insufficient stock" {
 			return h.errorResponse(c, fiber.StatusBadRequest, "Insufficient stock for one or more items", err)
+		}
+		// Map expired custom request error to 400 to support user-facing popup
+		if strings.Contains(err.Error(), "custom request") && strings.Contains(err.Error(), "has expired") {
+			return h.errorResponse(c, fiber.StatusBadRequest, "Custom request has expired. Please create a new request.", err)
 		}
 		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to create order", err)
 	}

@@ -1,21 +1,22 @@
 package orders
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"strconv"
+    "context"
+    "errors"
+    "fmt"
+    "strconv"
+    "time"
 
-	"errandShop/internal/domain/auth"
-	"errandShop/internal/domain/products"
-	"errandShop/internal/domain/coupons"
-	"errandShop/internal/domain/customers"
-	"errandShop/internal/domain/notifications"
-	"errandShop/internal/domain/custom_requests"
-	"errandShop/internal/domain/payments"
-	"errandShop/internal/core/types"
-	"github.com/google/uuid"
-	"gorm.io/gorm"
+    "errandShop/internal/domain/auth"
+    "errandShop/internal/domain/products"
+    "errandShop/internal/domain/coupons"
+    "errandShop/internal/domain/customers"
+    "errandShop/internal/domain/notifications"
+    "errandShop/internal/domain/custom_requests"
+    "errandShop/internal/domain/payments"
+    "errandShop/internal/core/types"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
 )
 
 // Service interfaces
@@ -245,6 +246,11 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, req CreateOrderR
 			// Validate that the custom request is accepted and has an active quote
 			if customRequest.Status != custom_requests.RequestCustomerAccepted {
 				return nil, fmt.Errorf("custom request %s is not in accepted status", customReq.CustomRequestID)
+			}
+
+			// Validate that the custom request is not expired
+			if customRequest.ExpiresAt != nil && time.Now().After(*customRequest.ExpiresAt) {
+				return nil, fmt.Errorf("custom request %s has expired", customReq.CustomRequestID)
 			}
 
 			if customRequest.ActiveQuote == nil {

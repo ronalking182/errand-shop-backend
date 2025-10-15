@@ -1,0 +1,63 @@
+services:
+  - type: web
+    name: errandshop-api
+    runtime: go
+    plan: starter
+    buildCommand: go build -o bin/server ./cmd/server
+    startCommand: ./bin/server
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      # App expects DATABASE (not DATABASE_URL). Provide both for compatibility.
+      - key: DATABASE
+        fromDatabase:
+          name: errandshop-db
+          property: internalConnectionString
+      - key: DATABASE_URL
+        fromDatabase:
+          name: errandshop-db
+          property: internalConnectionString
+
+      # Runtime & config
+      - key: APP_ENV
+        value: production
+      - key: AllowedOrigins
+        value: https://dashboard.errandshop.ng,https://app.errandshop.ng
+      - key: ALLOWED_ORIGINS
+        value: https://dashboard.errandshop.ng,https://app.errandshop.ng
+      - key: VERSION
+        value: "1"
+
+      # Secrets to set in Render UI
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_PHONE
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: FCM_SERVER_KEY
+        sync: false
+
+      # Non-secret config (set now or later)
+      - key: FROM_EMAIL
+        value: noreply@errandshop.com
+      - key: APP_BASE_URL
+        sync: false
+      - key: CALLBACK_URL
+        sync: false
+      - key: UPLOAD_BUCKET_URL
+        value: ""
+
+databases:
+  - name: errandshop-db
+    plan: starter

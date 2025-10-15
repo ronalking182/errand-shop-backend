@@ -101,6 +101,10 @@ func (s *service) CreateCustomRequest(userID uuid.UUID, req CreateCustomRequestR
 		UpdatedAt:          time.Now(),
 	}
 
+	// Set default 24-hour expiration
+	expiry := time.Now().Add(24 * time.Hour)
+	customRequest.ExpiresAt = &expiry
+
 	// Create request items
 	var items []RequestItem
 	for _, itemReq := range req.Items {
