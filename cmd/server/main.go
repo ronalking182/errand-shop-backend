@@ -112,6 +112,37 @@ func main() {
         ExposeHeaders:    "Set-Cookie",
         AllowCredentials: true,
     }))
+    // Fallback: after next handlers run, ensure Access-Control-* headers exist
+    app.Use(func(c *fiber.Ctx) error {
+        // proceed through handlers first
+        if err := c.Next(); err != nil {
+            return err
+        }
+        origin := c.Get("Origin")
+        if isAllowedOrigin(origin) {
+            // Preserve existing headers; only set if missing
+            if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
+                c.Set("Access-Control-Allow-Origin", origin)
+            }
+            if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
+                c.Set("Access-Control-Allow-Credentials", "true")
+            }
+            if c.Method() == fiber.MethodOptions {
+                if len(c.Response().Header.Peek("Access-Control-Allow-Methods")) == 0 {
+                    c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+                }
+                if len(c.Response().Header.Peek("Access-Control-Allow-Headers")) == 0 {
+                    c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+                }
+                if len(c.Response().Header.Peek("Access-Control-Expose-Headers")) == 0 {
+                    c.Set("Access-Control-Expose-Headers", "Set-Cookie")
+                }
+            }
+            // Always vary on Origin
+            c.Set("Vary", "Origin")
+        }
+        return nil
+    })
     // Passthrough catch-all OPTIONS so CORS attaches headers; also synthesize
     // standard CORS headers if needed for preflight requests.
     app.Options("/*", func(c *fiber.Ctx) error {
