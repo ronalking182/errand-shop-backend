@@ -1,11 +1,11 @@
 package main
 
 import (
-	"errandShop/config"
-	"errandShop/internal/database"
-	"errandShop/internal/domain/analytics"
-	"errandShop/internal/domain/auth"
-	"errandShop/internal/domain/chat"
+    "errandShop/config"
+    "errandShop/internal/database"
+    "errandShop/internal/domain/analytics"
+    "errandShop/internal/domain/auth"
+    "errandShop/internal/domain/chat"
 	"errandShop/internal/domain/coupons"
 	"errandShop/internal/domain/custom_requests"
 	"errandShop/internal/domain/customers"
@@ -18,16 +18,17 @@ import (
 	"errandShop/internal/middleware"
 	"errandShop/internal/services/audit"
 	"errandShop/internal/services/email"
-	v1 "errandShop/internal/transport/http/v1"
-	"fmt"
-	"log"
+    v1 "errandShop/internal/transport/http/v1"
+    "fmt"
+    "log"
+    "strings"
 
 	"errandShop/internal/http/handlers"
 	"errandShop/internal/repos"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/recover"
+    "github.com/gofiber/fiber/v2/middleware/cors"
+    "github.com/gofiber/fiber/v2/middleware/logger"
+    "github.com/gofiber/fiber/v2/middleware/recover"
 )
 
 // Create a temporary payments service interface for orders initialization
@@ -61,7 +62,7 @@ func main() {
 
 	// 🌐 Initialize Fiber Web Framework
 	log.Println("🌐 Initializing Fiber app...")
-	app := fiber.New(fiber.Config{
+    app := fiber.New(fiber.Config{
 		// 🚨 Global Error Handler
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -73,19 +74,32 @@ func main() {
 				"error": err.Error(),
 			})
 		},
-	})
+    })
 
-	// 🛡️ Middleware Setup
-	log.Println("🛡️ Setting up middleware...")
-	app.Use(logger.New())         // 📝 Request logging
-	app.Use(recover.New())        // 🔄 Panic recovery
-    // 🌍 CORS and security headers for API routes
-    // Attach to the /api/v1 group to guarantee execution order
-    // Preflight handled within group to return 204
-    log.Println("🔧 Attaching CORS & security headers to /api/v1 group...")
-    // Group-level middleware will apply to all /api/v1/* endpoints
-    // (we also add a global OPTIONS handler on the group for preflight)
-	log.Println("✅ Middleware configured")
+    // 🌍 CORS must be the first middleware so preflights carry headers
+    log.Println("🌍 Configuring global CORS (first middleware)...")
+    app.Use(cors.New(cors.Config{
+        AllowOrigins:     strings.Join([]string{
+            "https://v0-errand-shop-dashboard.vercel.app",
+            "https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app",
+            "https://v0-errand-shop-dashboard-jcjvf4fer-ronalking182s-projects.vercel.app",
+            "http://localhost:5173",
+        }, ","),
+        AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+        ExposeHeaders:    "Set-Cookie",
+        AllowCredentials: true,
+    }))
+    // Passthrough catch-all OPTIONS so CORS attaches headers, empty body 204
+    app.Options("/*", func(c *fiber.Ctx) error {
+        return c.SendStatus(fiber.StatusNoContent)
+    })
+
+    // 🛡️ Additional middleware
+    log.Println("🛡️ Setting up logger and recover...")
+    app.Use(logger.New())         // 📝 Request logging
+    app.Use(recover.New())        // 🔄 Panic recovery
+    log.Println("✅ Middleware configured")
 
 	// 👥 Initialize Customers Domain (needed for auth service)
 	log.Println("👥 Setting up customers domain...")
@@ -115,16 +129,8 @@ func main() {
     // 🛣️ API Routes Setup
     log.Println("🛣️ Setting up API routes...")
     api := app.Group("/api/v1")
-    // Attach CORS & security headers to this group
-    api.Use(cors.New(cors.Config{
-        AllowOrigins:     cfg.AllowedOrigins,
-        AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-        ExposeHeaders:    "Set-Cookie",
-        AllowCredentials: true,
-    }))
+    // Security headers and caching policy for API responses (does not touch CORS)
     api.Use(middleware.APISecurityHeaders())
-    api.Options("/*", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 
 	// Add base API info endpoint
 	api.Get("/", func(c *fiber.Ctx) error {
