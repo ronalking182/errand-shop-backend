@@ -26,7 +26,7 @@ type MigrationStatus struct {
 
 // Initialize all migrations
 func getMigrations() []*gormigrate.Migration {
-	return []*gormigrate.Migration{
+    return []*gormigrate.Migration{
 		// Initial migration (v1)
 		{
 			ID: "0001_initial",
@@ -401,7 +401,32 @@ func getMigrations() []*gormigrate.Migration {
 				return nil
 			},
 		},
-	}
+
+        {
+            ID: "0019_fix_orders_module_create_missing_tables",
+            Migrate: func(tx *gorm.DB) error {
+                log.Println("Ensuring orders tables exist (non-destructive AutoMigrate)...")
+                // Minimum set
+                if err := tx.AutoMigrate(
+                    &orders.Order{},
+                    &orders.OrderItem{},
+                ); err != nil {
+                    return err
+                }
+
+                // Optional extras — include ONLY if these types exist in the codebase:
+                // _ = tx.AutoMigrate(&orders.Cart{})
+                // _ = tx.AutoMigrate(&orders.CartItem{})
+                // _ = tx.AutoMigrate(&orders.OrderStatusHistory{})
+
+                return nil
+            },
+            Rollback: func(tx *gorm.DB) error {
+                log.Println("Rollback skipped for 0019 (no destructive changes).")
+                return nil
+            },
+        },
+    }
 }
 
 // Run all pending migrations
