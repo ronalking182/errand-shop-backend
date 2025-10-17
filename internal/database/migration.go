@@ -476,6 +476,42 @@ func getMigrations() []*gormigrate.Migration {
                 return tx.Where("email = ?", "Errandshop3js@gmail.com").Delete(&models.User{}).Error
             },
         },
+        // Enforce case-insensitive uniqueness on email and dedupe existing
+        {
+            ID: "0021_enforce_unique_lower_email",
+            Migrate: func(tx *gorm.DB) error {
+                log.Println("🔧 Checking and removing duplicate users by lower(email)...")
+
+                // Remove duplicates keeping the oldest record per lower(email)
+                // This uses a CTE to find the min(id) per lower(email) and delete others
+                dedupeSQL := `WITH d AS (
+                    SELECT LOWER(email) AS e_lower, MIN(id) AS keep_id
+                    FROM users
+                    GROUP BY LOWER(email)
+                    HAVING COUNT(*) > 1
+                )
+                DELETE FROM users u
+                USING d
+                WHERE LOWER(u.email) = d.e_lower AND u.id <> d.keep_id;`
+                if err := tx.Exec(dedupeSQL).Error; err != nil {
+                    log.Printf("⚠️ Failed to dedupe users: %v", err)
+                }
+
+                log.Println("🔒 Creating unique index on lower(email)...")
+                // Create a functional unique index to enforce case-insensitive uniqueness
+                if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower_unique ON users (LOWER(email))").Error; err != nil {
+                    return err
+                }
+
+                log.Println("✅ Case-insensitive unique constraint enforced on email")
+                return nil
+            },
+            Rollback: func(tx *gorm.DB) error {
+                log.Println("↩️ Dropping unique index on lower(email)...")
+                // Rollback just drops the unique index; duplicates are not recreated
+                return tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error
+            },
+        },
     }
 }
 

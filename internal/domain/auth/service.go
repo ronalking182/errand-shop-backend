@@ -45,6 +45,10 @@ func NewService(repo *Repository, cfg *config.Config, emailService *email.Resend
 
 // Update Register method to include permissions and email
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResponse, error) {
+	// Normalize email and phone to prevent duplicates
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Phone = strings.TrimSpace(req.Phone)
+
 	// Check if user already exists
 	existingUser, _ := s.Repo.GetByEmail(ctx, req.Email)
 	if existingUser != nil {
@@ -491,16 +495,26 @@ func (s *Service) ResetPassword(ctx context.Context, email, otp, newPassword str
 		return err
 	}
 
-	// Get user
-	user, err := s.Repo.GetByEmail(ctx, email)
+	// Get user (use normalized email for lookup to avoid case issues)
+	normalizedEmail := strings.TrimSpace(strings.ToLower(email))
+	user, err := s.Repo.GetByEmail(ctx, normalizedEmail)
 	if err != nil {
 		return fmt.Errorf("user not found")
 	}
 
-	// Update password
-	user.Password = newPassword // Will be hashed in BeforeCreate
-	if err := s.Repo.Update(ctx, user); err != nil {
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
+	if err != nil {
 		return err
+	}
+
+	if err := s.Repo.UpdateUserPassword(ctx, user.ID, string(hashedPassword)); err != nil {
+		return err
+	}
+
+	// Clear force reset flag if set
+	if user.ForceReset {
+		_ = s.Repo.ForcePasswordReset(ctx, user.ID, false)
 	}
 
 	// Mark OTP as used
@@ -610,18 +624,26 @@ func (s *Service) UpdateUser(ctx context.Context, userID uuid.UUID, req UpdateUs
 	}
 
 	// Check for phone number uniqueness if phone is being updated
-	if req.Phone != nil && *req.Phone != user.Phone {
-		existingUser, err := s.Repo.GetByPhone(ctx, *req.Phone)
-		if err == nil && existingUser.ID != userID {
-			return nil, fmt.Errorf("phone number already exists")
+	if req.Phone != nil {
+		normalizedPhone := strings.TrimSpace(*req.Phone)
+		if normalizedPhone != user.Phone {
+			existingUser, err := s.Repo.GetByPhone(ctx, normalizedPhone)
+			if err == nil && existingUser.ID != userID {
+				return nil, fmt.Errorf("phone number already exists")
+			}
+			user.Phone = normalizedPhone
 		}
 	}
 
 	// Check for email uniqueness if email is being updated
-	if req.Email != nil && *req.Email != user.Email {
-		existingUser, err := s.Repo.GetByEmail(ctx, *req.Email)
-		if err == nil && existingUser.ID != userID {
-			return nil, fmt.Errorf("email already exists")
+	if req.Email != nil {
+		normalizedEmail := strings.ToLower(strings.TrimSpace(*req.Email))
+		if normalizedEmail != user.Email {
+			existingUser, err := s.Repo.GetByEmail(ctx, normalizedEmail)
+			if err == nil && existingUser.ID != userID {
+				return nil, fmt.Errorf("email already exists")
+			}
+			user.Email = normalizedEmail
 		}
 	}
 
