@@ -503,6 +503,21 @@ func getMigrations() []*gormigrate.Migration {
 
                 // Wrap normalization, dedupe, and index creation in a transaction
                 return tx.Transaction(func(tx *gorm.DB) error {
+                    // Drop any legacy case-sensitive unique constraint/index on users.email
+                    if err := tx.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS uni_users_email").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop legacy constraint uni_users_email: %v", err)
+                    }
+                    if err := tx.Exec("DROP INDEX IF EXISTS uni_users_email").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop legacy index uni_users_email: %v", err)
+                    }
+                    // Common default names created by Postgres/GORM
+                    if err := tx.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop default constraint users_email_key: %v", err)
+                    }
+                    if err := tx.Exec("DROP INDEX IF EXISTS idx_users_email").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop default index idx_users_email: %v", err)
+                    }
+
                     // Log current duplicate groups count (case-insensitive)
                     var dupGroups int
                     countSQL := `SELECT COUNT(*) FROM (
@@ -559,7 +574,7 @@ func getMigrations() []*gormigrate.Migration {
                         return err
                     }
 
-                    log.Println("✅ Normalized emails, deduped duplicates, and enforced unique LOWER(email)")
+                    log.Println("✅ Dropped legacy unique, normalized emails, deduped duplicates, and enforced unique LOWER(email)")
                     return nil
                 })
             },
