@@ -189,11 +189,11 @@ interface ProcessedMessage extends WebSocketMessage {
  */
 export const processWebSocketMessage = async (message: WebSocketMessage) => {
   try {
-    console.log('🔄 Processing WebSocket message:', {
+    console.debug('WS message meta', {
       type: message.type,
-      room_id: message.room_id,
+      room_id: (message as any).room_id ?? (message as any).roomId,
       timestamp: message.timestamp,
-      data: message.data
+      data: message.data,
     });
     
     // First handle support-chat mapping
@@ -783,6 +783,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ room }) => {
   };
   
   const roomMessages = messages[room.id] || [];
+  if (roomMessages.length > 0) {
+    console.debug('ChatWindow sample messages',
+      roomMessages.slice(0, 3).map((msg) => ({
+        id: msg.id,
+        sender_type: (msg as any).sender_type ?? (msg as any).senderType,
+        message: (msg.message || '').substring(0, 20) + '...',
+      }))
+    );
+  }
   
   return (
     <div className="flex flex-col h-full">
