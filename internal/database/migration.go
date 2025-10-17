@@ -557,24 +557,63 @@ func getMigrations() []*gormigrate.Migration {
                         return err
                     }
 
-                    // Delete duplicates, keeping the earliest created row
+                    // Map duplicates to keeper
+                    dupsSQL := `CREATE TEMP TABLE users_dups AS
+                        SELECT u.id AS dup_id,
+                               k.id AS keep_id
+                        FROM users u
+                        JOIN users_keep k ON LOWER(u.email) = k.email_lower
+                        WHERE u.id <> k.id;`
+                    if err := tx.Exec(dupsSQL).Error; err != nil {
+                        log.Printf("⚠️ Failed to create users_dups: %v", err)
+                        return err
+                    }
+
+                    // Reassign child rows (otps.user_id) to the keeper to prevent FK violations
+                    reassignSQL := `UPDATE otps o
+                        SET user_id = d.keep_id
+                        FROM users_dups d
+                        WHERE o.user_id = d.dup_id;`
+                    res := tx.Exec(reassignSQL)
+                    if res.Error != nil {
+                        log.Printf("⚠️ Failed to reassign OTPs to keeper users: %v", res.Error)
+                        return res.Error
+                    }
+                    log.Printf("🔧 Reassigned %d OTP rows from duplicate users", res.RowsAffected)
+
+                    // Optional hardening: make otps.user_id FK ON DELETE CASCADE
+                    if err := tx.Exec("ALTER TABLE otps DROP CONSTRAINT IF EXISTS fk_users_ot_ps").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop FK fk_users_ot_ps: %v", err)
+                    }
+                    if err := tx.Exec("ALTER TABLE otps DROP CONSTRAINT IF EXISTS otps_user_id_fkey").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop default FK otps_user_id_fkey: %v", err)
+                    }
+                    if err := tx.Exec("ALTER TABLE otps ADD CONSTRAINT fk_users_ot_ps FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE").Error; err != nil {
+                        log.Printf("⚠️ Failed to add ON DELETE CASCADE FK for otps.user_id: %v", err)
+                    } else {
+                        log.Println("✅ Ensured otps.user_id FK uses ON DELETE CASCADE")
+                    }
+
+                    // Delete duplicate users using mapping table
                     deleteSQL := `DELETE FROM users u
-                        USING users_keep k
-                        WHERE LOWER(u.email) = k.email_lower
-                          AND u.id <> k.id;`
+                        USING users_dups d
+                        WHERE u.id = d.dup_id;`
                     if err := tx.Exec(deleteSQL).Error; err != nil {
                         log.Printf("⚠️ Failed to delete duplicate users: %v", err)
                         return err
                     }
 
-                    // Create case-insensitive unique index on LOWER(email)
-                    indexSQL := `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower_unique ON users (LOWER(email));`
+                    // Recreate case-insensitive unique index on LOWER(email)
+                    if err := tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error; err != nil {
+                        log.Printf("⚠️ Failed to drop idx_users_email_lower_unique: %v", err)
+                    }
+                    indexSQL := `CREATE UNIQUE INDEX idx_users_email_lower_unique ON users (LOWER(email));`
                     if err := tx.Exec(indexSQL).Error; err != nil {
                         log.Printf("⚠️ Failed to create unique index on LOWER(email): %v", err)
                         return err
                     }
 
-                    log.Println("✅ Dropped legacy unique, normalized emails, deduped duplicates, and enforced unique LOWER(email)")
+                    log.Println("✅ Reassigned otps, deleted duplicates, and enforced unique LOWER(email)")
                     return nil
                 })
             },
