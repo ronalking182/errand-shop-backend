@@ -480,35 +480,91 @@ func getMigrations() []*gormigrate.Migration {
         {
             ID: "0021_enforce_unique_lower_email",
             Migrate: func(tx *gorm.DB) error {
-                log.Println("🔧 Checking and removing duplicate users by lower(email)...")
+                log.Println("🔧 Preparing to normalize emails and dedupe by LOWER(email)...")
 
-                // Remove duplicates keeping the oldest record per lower(email)
-                // This uses a CTE to find the min(id) per lower(email) and delete others
-                dedupeSQL := `WITH d AS (
-                    SELECT LOWER(email) AS e_lower, MIN(id) AS keep_id
-                    FROM users
-                    GROUP BY LOWER(email)
-                    HAVING COUNT(*) > 1
-                )
-                DELETE FROM users u
-                USING d
-                WHERE LOWER(u.email) = d.e_lower AND u.id <> d.keep_id;`
-                if err := tx.Exec(dedupeSQL).Error; err != nil {
-                    log.Printf("⚠️ Failed to dedupe users: %v", err)
+                // Ensure gorm migrations bookkeeping table exists if queried elsewhere
+                if err := tx.Exec(`CREATE TABLE IF NOT EXISTS gorm_migrations (
+                    id SERIAL PRIMARY KEY,
+                    migration_id TEXT UNIQUE,
+                    applied_at TIMESTAMPTZ DEFAULT now()
+                )`).Error; err != nil {
+                    log.Printf("⚠️ Failed to ensure gorm_migrations table: %v", err)
                 }
 
-                log.Println("🔒 Creating unique index on lower(email)...")
-                // Create a functional unique index to enforce case-insensitive uniqueness
-                if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower_unique ON users (LOWER(email))").Error; err != nil {
+                // Ensure base tables/columns exist before custom SQL
+                if err := tx.AutoMigrate(
+                    &models.User{},
+                    &models.OTP{},
+                    &models.Address{},
+                    &models.RefreshToken{},
+                ); err != nil {
                     return err
                 }
 
-                log.Println("✅ Case-insensitive unique constraint enforced on email")
-                return nil
+                // Wrap normalization, dedupe, and index creation in a transaction
+                return tx.Transaction(func(tx *gorm.DB) error {
+                    // Log current duplicate groups count (case-insensitive)
+                    var dupGroups int
+                    countSQL := `SELECT COUNT(*) FROM (
+                        SELECT LOWER(email) AS e, COUNT(*) AS c
+                        FROM users
+                        WHERE email IS NOT NULL
+                        GROUP BY 1
+                        HAVING COUNT(*) > 1
+                    ) d;`
+                    if err := tx.Raw(countSQL).Scan(&dupGroups).Error; err == nil {
+                        if dupGroups > 0 {
+                            log.Printf("🔎 Found %d case-insensitive duplicate email groups", dupGroups)
+                        } else {
+                            log.Println("✅ No case-insensitive duplicate email groups detected")
+                        }
+                    } else {
+                        log.Printf("⚠️ Failed counting duplicate email groups: %v", err)
+                    }
+
+                    // Normalize emails to LOWER(TRIM(email))
+                    normalizeSQL := `UPDATE users SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL;`
+                    if err := tx.Exec(normalizeSQL).Error; err != nil {
+                        log.Printf("⚠️ Email normalization failed: %v", err)
+                        // Continue; dedupe may still succeed depending on state
+                    }
+
+                    // Keep oldest row per lower(email) via DISTINCT ON
+                    keepSQL := `CREATE TEMP TABLE users_keep AS
+                        SELECT DISTINCT ON (LOWER(email))
+                               id,
+                               LOWER(email) AS email_lower
+                        FROM users
+                        WHERE email IS NOT NULL
+                        ORDER BY LOWER(email), created_at ASC, id ASC;`
+                    if err := tx.Exec(keepSQL).Error; err != nil {
+                        log.Printf("⚠️ Failed to create users_keep: %v", err)
+                        return err
+                    }
+
+                    // Delete duplicates, keeping the earliest created row
+                    deleteSQL := `DELETE FROM users u
+                        USING users_keep k
+                        WHERE LOWER(u.email) = k.email_lower
+                          AND u.id <> k.id;`
+                    if err := tx.Exec(deleteSQL).Error; err != nil {
+                        log.Printf("⚠️ Failed to delete duplicate users: %v", err)
+                        return err
+                    }
+
+                    // Create case-insensitive unique index on LOWER(email)
+                    indexSQL := `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower_unique ON users (LOWER(email));`
+                    if err := tx.Exec(indexSQL).Error; err != nil {
+                        log.Printf("⚠️ Failed to create unique index on LOWER(email): %v", err)
+                        return err
+                    }
+
+                    log.Println("✅ Normalized emails, deduped duplicates, and enforced unique LOWER(email)")
+                    return nil
+                })
             },
             Rollback: func(tx *gorm.DB) error {
                 log.Println("↩️ Dropping unique index on lower(email)...")
-                // Rollback just drops the unique index; duplicates are not recreated
                 return tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error
             },
         },
