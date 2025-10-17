@@ -4,7 +4,6 @@ import (
 	"errandShop/internal/presenter"
 	"errandShop/internal/validation"
 	"errors"
-	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -129,19 +128,11 @@ func (h *Handler) ProcessPayment(c *fiber.Ctx) error {
 		return presenter.BadRequest(c, "Validation failed")
 	}
 
-	// Use customerID in the service call
-	customerID, err := h.getCurrentUserID(c)
-	if err != nil {
-		return presenter.Err(c, fiber.StatusUnauthorized, "Authentication required")
-	}
-
 	payment := h.service.ProcessPayment(req)
 	if payment == nil {
 		return presenter.InternalServerError(c, "Failed to process payment")
 	}
 
-	// Add debug print statement
-	fmt.Printf("[DEBUG] Payment processed for customer %d: %+v\n", customerID, payment)
 	return presenter.Success(c, "Payment processed successfully", payment)
 }
 
@@ -159,7 +150,6 @@ func (h *Handler) GetPayment(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Failed to get payment")
 	}
 
-	fmt.Printf("[DEBUG] Retrieved payment: %+v\n", payment)
 	return presenter.Success(c, "Payment retrieved successfully", payment)
 }
 
@@ -177,7 +167,6 @@ func (h *Handler) GetPaymentByTransactionRef(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Failed to get payment")
 	}
 
-	fmt.Printf("[DEBUG] Retrieved payment by ref %s: %+v\n", transactionRef, payment)
 	return presenter.Success(c, "Payment retrieved successfully", payment)
 }
 
@@ -192,13 +181,11 @@ func (h *Handler) InitiateRefund(c *fiber.Ctx) error {
 	}
 
 	// Fix: Pass value instead of pointer if service expects value
-	refund, err := h.service.InitiateRefund(req) // Remove & if service expects value
+	refund, err := h.service.InitiateRefund(req)
 	if err != nil {
-		fmt.Printf("[DEBUG] Refund initiation error: %v\n", err)
 		return presenter.InternalServerError(c, "Failed to initiate refund")
 	}
 
-	fmt.Printf("[DEBUG] Refund initiated: %+v\n", refund)
 	return presenter.Success(c, "Refund initiated successfully", refund)
 }
 

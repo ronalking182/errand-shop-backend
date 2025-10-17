@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"errandShop/internal/pkg/models"
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +12,6 @@ import (
 func AdminOnly() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		role := c.Locals("role")
-		fmt.Printf("[RBAC DEBUG] AdminOnly - Role: %v (type: %T)\n", role, role)
 
 		// Allow both admin and superadmin access
 		if role != "admin" && role != "superadmin" {

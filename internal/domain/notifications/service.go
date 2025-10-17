@@ -236,7 +236,6 @@ func (s *notificationService) RegisterPushToken(userID uuid.UUID, userType strin
 		return nil, fmt.Errorf("failed to register push token: %w", err)
 	}
 
-	fmt.Printf("[DEBUG] Push token registered for user %s (%s): %s\n", userID, userType, req.Token)
 	return &PushTokenResponse{
 		ID:         pushToken.ID,
 		Token:      pushToken.Token,

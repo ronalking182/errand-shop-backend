@@ -4,7 +4,6 @@ import (
 	"errandShop/config"
 	"errandShop/internal/pkg/jwt"
 	"errandShop/internal/presenter"
-	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -14,26 +13,13 @@ import (
 // JWTMiddleware validates JWT tokens
 func JWTMiddleware(cfg *config.Config) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Debug logging for POST requests
-		if c.Method() == "POST" {
-			fmt.Printf("DEBUG JWT - Method: %s, Path: %s\n", c.Method(), c.Path())
-			fmt.Printf("DEBUG JWT - Authorization header: %s\n", c.Get("Authorization"))
-			fmt.Printf("DEBUG JWT - Cookie token: %s\n", c.Cookies("token"))
-		}
-		
 		token := extractToken(c)
 		if token == "" {
-			if c.Method() == "POST" {
-				fmt.Printf("DEBUG JWT - No token found for POST request\n")
-			}
 			return presenter.Err(c, fiber.StatusUnauthorized, "Missing or invalid token")
 		}
 
 		claims, err := validateToken(token, cfg.JWTSecret)
 		if err != nil {
-			if c.Method() == "POST" {
-				fmt.Printf("DEBUG JWT - Token validation failed for POST: %v\n", err)
-			}
 			return presenter.Err(c, fiber.StatusUnauthorized, "Invalid token")
 		}
 
@@ -42,10 +28,6 @@ func JWTMiddleware(cfg *config.Config) fiber.Handler {
 		c.Locals("email", claims.Email)
 		c.Locals("role", claims.Role)
 		c.Locals("permissions", claims.Permissions)
-
-		if c.Method() == "POST" {
-			fmt.Printf("DEBUG JWT - POST request authenticated successfully, role: %s\n", claims.Role)
-		}
 
 		return c.Next()
 	}
@@ -72,7 +54,6 @@ func OptionalJWTMiddleware(cfg *config.Config) fiber.Handler {
 func AdminMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		role := c.Locals("role")
-		fmt.Printf("DEBUG - Role from token: %v (type: %T)\n", role, role)
 		if role == nil || (role != "admin" && role != "superadmin") {
 			return presenter.Err(c, fiber.StatusForbidden, "Admin access required")
 		}

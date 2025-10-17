@@ -8,6 +8,7 @@ import (
 	"errandShop/internal/services/audit"
 	"errandShop/internal/services/email"
 	"fmt"
+	"log"
 	"math/big"
 	"strings"
 	"time"
@@ -104,7 +105,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthRespo
 		// Create customer profile (don't fail registration if this fails)
 		if _, err := s.CustomerService.CreateCustomer(customerReq); err != nil {
 			// Log the error but don't fail the registration
-			fmt.Printf("Warning: Failed to create customer profile for user %d: %v\n", user.ID, err)
+			log.Printf("Warning: Failed to create customer profile for user %d: %v", user.ID, err)
 		}
 	}
 
@@ -129,7 +130,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthRespo
 
 	// Send verification email
 	if err := s.SendVerificationEmail(ctx, user.ID); err != nil {
-		fmt.Printf("Warning: Failed to send verification email to %s: %v\n", user.Email, err)
+		log.Printf("Warning: Failed to send verification email to %s: %v", user.Email, err)
 	}
 
 	// Send welcome email
@@ -482,7 +483,8 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 	}
 
 	// TODO: Send email using Resend
-	fmt.Printf("Password reset OTP for %s: %s\n", email, otp)
+	// Removed insecure OTP print to console
+	// fmt.Printf("Password reset OTP for %s: %s\n", email, otp)
 
 	return nil
 }

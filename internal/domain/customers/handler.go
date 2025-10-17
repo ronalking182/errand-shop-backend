@@ -89,7 +89,6 @@ func (h *Handler) CreateCustomer(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Invalid response type")
 	}
 
-	fmt.Printf("[DEBUG] Customer created: %+v\n", customer)
 	return presenter.Created(c, customer)
 }
 
@@ -107,7 +106,6 @@ func (h *Handler) GetCustomerProfile(c *fiber.Ctx) error {
 		return presenter.ErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve customer profile")
 	}
 
-	fmt.Printf("[DEBUG] Retrieved customer profile for user %d: %+v\n", userID, customer)
 	return presenter.SuccessResponse(c, "Customer profile retrieved successfully", customer)
 }
 
@@ -140,7 +138,6 @@ func (h *Handler) CreateAddress(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Failed to create address")
 	}
 
-	fmt.Printf("[DEBUG] Address created for customer %d: %+v\n", customer.ID, address)
 	return presenter.Created(c, address)
 }
 
@@ -164,7 +161,6 @@ func (h *Handler) GetCustomerAddresses(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Failed to get addresses")
 	}
 
-	fmt.Printf("[DEBUG] Retrieved %d addresses for customer %d\n", len(addresses), customer.ID)
 	return presenter.SuccessResponse(c, "Addresses retrieved successfully", addresses)
 }
 
@@ -278,7 +274,6 @@ func (h *Handler) UpdateCustomerProfile(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Failed to update customer profile")
 	}
 
-	fmt.Printf("[DEBUG] Customer profile updated for user %d: %+v\n", userID, updatedCustomer)
 	return presenter.OK(c, updatedCustomer, nil)
 }
 
@@ -332,7 +327,7 @@ func (h *Handler) SetDefaultAddress(c *fiber.Ctx) error {
 		return presenter.InternalServerError(c, "Failed to set default address")
 	}
 
-	fmt.Printf("[DEBUG] Set address %d as default for customer %d\n", addressID, customer.ID)
+
 	return presenter.SuccessResponse(c, "Default address set successfully", nil)
 }
 
