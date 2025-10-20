@@ -26,7 +26,7 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error
 	var user User
 	// Make email lookup case-insensitive and avoid scanning permissions column
 	err := r.db.WithContext(ctx).
-		Select("id, first_name, last_name, name, email, phone, avatar, role, status, is_verified, force_reset, last_login_at, created_at, updated_at").
+		Select("id, first_name, last_name, name, email, phone, avatar, role, status, is_verified, force_reset, last_login_at, password, created_at, updated_at").
 		Where("LOWER(email) = LOWER(?)", email).
 		First(&user).Error
 	if err != nil {
@@ -42,7 +42,7 @@ func (r *Repository) GetByPhone(ctx context.Context, phone string) (*User, error
 	var user User
 	// Avoid scanning permissions column
 	err := r.db.WithContext(ctx).
-		Select("id, first_name, last_name, name, email, phone, avatar, role, status, is_verified, force_reset, last_login_at, created_at, updated_at").
+		Select("id, first_name, last_name, name, email, phone, avatar, role, status, is_verified, force_reset, last_login_at, password, created_at, updated_at").
 		Where("phone = ?", phone).
 		First(&user).Error
 	if err != nil {
@@ -58,7 +58,7 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	var user User
 	// Avoid scanning permissions column
 	err := r.db.WithContext(ctx).
-		Select("id, first_name, last_name, name, email, phone, avatar, role, status, is_verified, force_reset, last_login_at, created_at, updated_at").
+		Select("id, first_name, last_name, name, email, phone, avatar, role, status, is_verified, force_reset, last_login_at, password, created_at, updated_at").
 		Where("id = ?", id).
 		First(&user).Error
 	if err != nil {
