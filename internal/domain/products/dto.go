@@ -79,6 +79,12 @@ type CreateCategoryRequest struct {
 	Description string `json:"description" validate:"omitempty,max=500"`
 }
 
+type UpdateCategoryRequest struct {
+	Name        *string `json:"name" validate:"omitempty,min=2,max=100"`
+	Description *string `json:"description" validate:"omitempty,max=500"`
+	IsActive    *bool   `json:"isActive" validate:"omitempty"`
+}
+
 type CategoryResponse struct {
 	ID           uuid.UUID `json:"id"`
 	Name         string    `json:"name"`

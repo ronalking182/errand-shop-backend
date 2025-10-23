@@ -27,10 +27,18 @@ func MountAdminProductRoutes(r fiber.Router, h *products.Handler) {
 	r.Post("/products/stock/bulk-update", h.BulkUpdateStock)
 	r.Get("/products/low-stock", h.GetLowStock)
 
-	// Image upload/delete routes removed - using external image hosting (Cloudinary)
-	
 	// Parameterized routes (must come last)
 	r.Get("/products/:id", h.Get)
 	r.Put("/products/:id", h.Update)
 	r.Delete("/products/:id", h.Delete)
+}
+
+// Superadmin-only category CRUD routes (mount under an admin group with SuperAdmin middleware)
+func MountSuperAdminCategoryRoutes(r fiber.Router, h *products.Handler) {
+	// CRUD on categories table
+	r.Post("/categories", h.CreateCategory)
+	r.Get("/categories", h.ListCategories)
+	r.Get("/categories/:id", h.GetCategory)
+	r.Put("/categories/:id", h.UpdateCategory)
+	r.Delete("/categories/:id", h.DeleteCategory)
 }

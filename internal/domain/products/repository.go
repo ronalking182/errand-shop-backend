@@ -295,6 +295,38 @@ func (r *Repository) CreateCategory(ctx context.Context, category *Category) err
 	return r.db.WithContext(ctx).Create(category).Error
 }
 
+func (r *Repository) GetCategoryByID(ctx context.Context, id uuid.UUID) (*Category, error) {
+	var c Category
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&c).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *Repository) UpdateCategory(ctx context.Context, id uuid.UUID, updates map[string]interface{}) error {
+	// Do not override updated_at here; service sets a portable timestamp
+	return r.db.WithContext(ctx).Model(&Category{}).Where("id = ?", id).Updates(updates).Error
+}
+
+func (r *Repository) DeleteCategory(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&Category{}).Where("id = ?", id).Update("is_active", false).Error
+}
+
+func (r *Repository) ListCategories(ctx context.Context) ([]CategoryResponse, error) {
+	var out []CategoryResponse
+	q := r.db.WithContext(ctx).
+		Table("categories as c").
+		Select("c.id, c.name, c.description, c.is_active, c.created_at, COALESCE(COUNT(p.id),0) as product_count").
+		Joins("LEFT JOIN products p ON p.category = c.name AND p.is_active = ?", true).
+		Where("c.is_active = ?", true).
+		Group("c.id").
+		Order("c.name ASC")
+	if err := q.Scan(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Analytics
 func (r *Repository) GetProductAnalytics(ctx context.Context) (*ProductAnalytics, error) {
 	var analytics ProductAnalytics

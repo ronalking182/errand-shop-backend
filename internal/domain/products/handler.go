@@ -287,8 +287,84 @@ func (h *Handler) GetCategories(c *fiber.Ctx) error {
 	if err != nil {
 		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to get categories", err)
 	}
+	return h.successResponse(c, categories, "Categories retrieved successfully")
+}
 
-	return h.successResponse(c, categories, "")
+// Superadmin-only: Create Category
+func (h *Handler) CreateCategory(c *fiber.Ctx) error {
+	var req CreateCategoryRequest
+	if err := c.BodyParser(&req); err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid request body", err)
+	}
+	if err := validate.Struct(req); err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Validation failed", err)
+	}
+	cat := &Category{
+		Name:        strings.TrimSpace(req.Name),
+		Description: strings.TrimSpace(req.Description),
+		IsActive:    true,
+	}
+	if err := h.svc.CreateCategory(c.Context(), cat); err != nil {
+		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to create category", err)
+	}
+	return h.successResponse(c, cat, "Category created successfully")
+}
+
+// Superadmin-only: List Categories (from categories table)
+func (h *Handler) ListCategories(c *fiber.Ctx) error {
+	cats, err := h.svc.ListCategories(c.Context())
+	if err != nil {
+		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to list categories", err)
+	}
+	return h.successResponse(c, cats, "Categories retrieved successfully")
+}
+
+// Superadmin-only: Get Category by ID
+func (h *Handler) GetCategory(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", err)
+	}
+	cat, err := h.svc.GetCategory(c.Context(), id)
+	if err != nil {
+		return h.errorResponse(c, fiber.StatusNotFound, "Category not found", err)
+	}
+	return h.successResponse(c, cat, "Category retrieved successfully")
+}
+
+// Superadmin-only: Update Category
+func (h *Handler) UpdateCategory(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", err)
+	}
+	var req UpdateCategoryRequest
+	if err := c.BodyParser(&req); err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid request body", err)
+	}
+	if err := validate.Struct(req); err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Validation failed", err)
+	}
+	cat, err := h.svc.UpdateCategory(c.Context(), id, req)
+	if err != nil {
+		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to update category", err)
+	}
+	return h.successResponse(c, cat, "Category updated successfully")
+}
+
+// Superadmin-only: Delete Category (soft delete)
+func (h *Handler) DeleteCategory(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", err)
+	}
+	if err := h.svc.DeleteCategory(c.Context(), id); err != nil {
+		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to delete category", err)
+	}
+	return h.successResponse(c, fiber.Map{"id": id}, "Category deleted successfully")
 }
 
 func atoiDefault(s string, d int) int {

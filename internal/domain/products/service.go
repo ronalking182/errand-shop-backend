@@ -390,6 +390,25 @@ func (s *Service) GetCategories(ctx context.Context) ([]CategoryResponse, error)
 func (s *Service) CreateCategory(ctx context.Context, category *Category) error {
 	s.logger.Printf("Creating category: %s", category.Name)
 
+	name := strings.TrimSpace(category.Name)
+	if name == "" {
+		return errors.New("category name is required")
+	}
+	category.Name = name
+
+	// Set portable ID and timestamps to avoid DB-specific defaults
+	if category.ID == uuid.Nil {
+		category.ID = uuid.New()
+	}
+	now := time.Now()
+	if category.CreatedAt.IsZero() {
+		category.CreatedAt = now
+	}
+	category.UpdatedAt = now
+	if !category.IsActive {
+		category.IsActive = true
+	}
+
 	if err := s.repo.CreateCategory(ctx, category); err != nil {
 		s.logger.Printf("Error creating category: %v", err)
 		return fmt.Errorf("failed to create category: %w", err)
@@ -399,6 +418,73 @@ func (s *Service) CreateCategory(ctx context.Context, category *Category) error 
 	return nil
 }
 
+func (s *Service) ListCategories(ctx context.Context) ([]CategoryResponse, error) {
+	s.logger.Printf("Listing categories")
+	cats, err := s.repo.ListCategories(ctx)
+	if err != nil {
+		s.logger.Printf("Error listing categories: %v", err)
+		return nil, fmt.Errorf("failed to list categories: %w", err)
+	}
+	return cats, nil
+}
+
+func (s *Service) GetCategory(ctx context.Context, id uuid.UUID) (*Category, error) {
+	if id == uuid.Nil {
+		return nil, errors.New("invalid category ID")
+	}
+	cat, err := s.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("category not found: %w", err)
+	}
+	return cat, nil
+}
+
+func (s *Service) UpdateCategory(ctx context.Context, id uuid.UUID, req UpdateCategoryRequest) (*Category, error) {
+	if id == uuid.Nil {
+		return nil, errors.New("invalid category ID")
+	}
+	_, err := s.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("category not found: %w", err)
+	}
+	updates := map[string]interface{}{}
+	if req.Name != nil && strings.TrimSpace(*req.Name) != "" {
+		updates["name"] = strings.TrimSpace(*req.Name)
+	}
+	if req.Description != nil {
+		updates["description"] = strings.TrimSpace(*req.Description)
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+	if len(updates) == 0 {
+		return nil, errors.New("no fields to update")
+	}
+	updates["updated_at"] = time.Now()
+	if err := s.repo.UpdateCategory(ctx, id, updates); err != nil {
+		return nil, fmt.Errorf("failed to update category: %w", err)
+	}
+	cat, err := s.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated category: %w", err)
+	}
+	return cat, nil
+}
+
+func (s *Service) DeleteCategory(ctx context.Context, id uuid.UUID) error {
+	if id == uuid.Nil {
+		return errors.New("invalid category ID")
+	}
+	// ensure exists
+	_, err := s.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("category not found: %w", err)
+	}
+	if err := s.repo.DeleteCategory(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete category: %w", err)
+	}
+	return nil
+}
 // Analytics
 func (s *Service) GetProductAnalytics(ctx context.Context) (*ProductAnalytics, error) {
 	s.logger.Printf("Getting product analytics")
