@@ -379,6 +379,11 @@ func main() {
 	log.Println("👑 Configuring admin product routes...")
 	v1.MountAdminProductRoutes(adminRoutes, productsHandler)
 
+	// 🔒 SuperAdmin-only category CRUD routes
+	log.Println("🛡️ Configuring superadmin category routes...")
+	superAdminRoutes := adminRoutes.Group("", middleware.SuperAdminMiddleware())
+	v1.MountSuperAdminCategoryRoutes(superAdminRoutes, productsHandler)
+
 	// 👥 Setup Customers Routes (service already initialized above)
 	log.Println("👥 Setting up customers routes...")
 	customersHandler := customers.NewHandler(customersService)

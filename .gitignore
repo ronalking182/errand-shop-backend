@@ -42,6 +42,7 @@ errand-shop-messaging-firebase-adminsdk-*.json
 tmp/
 main
 server
+!cmd/server/**
 errand-shop-backend
 *.log
 
