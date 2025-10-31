@@ -377,7 +377,8 @@ func (s *Service) GetOutOfStockProducts(ctx context.Context, limit int) ([]Produ
 func (s *Service) GetCategories(ctx context.Context) ([]CategoryResponse, error) {
 	s.logger.Printf("Getting product categories")
 
-	categories, err := s.repo.GetCategories(ctx)
+	// Return table-backed categories with counts, ensuring seeded categories appear
+	categories, err := s.repo.ListCategories(ctx)
 	if err != nil {
 		s.logger.Printf("Error getting categories: %v", err)
 		return nil, fmt.Errorf("failed to get categories: %w", err)
