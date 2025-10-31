@@ -637,6 +637,39 @@ func getMigrations() []*gormigrate.Migration {
                 return nil
             },
         },
+        {
+            ID: "0023_seed_default_categories",
+            Migrate: func(tx *gorm.DB) error {
+                log.Println("Seeding default product categories (idempotent)...")
+                names := []string{
+                    "Condiments",
+                    "Oils",
+                    "Pap and purees",
+                    "Proteins",
+                    "Tubers",
+                    "Grains and Staples",
+                    "Vegetables",
+                    "Fresh produce",
+                    "Pepper mix",
+                    "Fruits",
+                    "Provisions",
+                    "Detergent and Laundry",
+                }
+                for _, name := range names {
+                    if err := tx.Exec("INSERT INTO categories (name, description, is_active, created_at, updated_at) VALUES (?, '', TRUE, NOW(), NOW()) ON CONFLICT (name) DO NOTHING", name).Error; err != nil {
+                        log.Printf("Failed to insert category %s: %v", name, err)
+                        return err
+                    }
+                }
+                log.Println("✅ Default categories seeded (existing preserved)")
+                return nil
+            },
+            Rollback: func(tx *gorm.DB) error {
+                log.Println("Removing seeded default product categories...")
+                // Safe rollback: delete only the seeded names
+                return tx.Exec("DELETE FROM categories WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
+            },
+        },
     }
 }
 

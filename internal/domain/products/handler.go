@@ -356,15 +356,31 @@ func (h *Handler) UpdateCategory(c *fiber.Ctx) error {
 
 // Superadmin-only: Delete Category (soft delete)
 func (h *Handler) DeleteCategory(c *fiber.Ctx) error {
-	idStr := c.Params("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", err)
-	}
-	if err := h.svc.DeleteCategory(c.Context(), id); err != nil {
-		return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to delete category", err)
-	}
-	return h.successResponse(c, fiber.Map{"id": id}, "Category deleted successfully")
+    idStr := c.Params("id")
+    if strings.TrimSpace(idStr) == "" {
+        return h.errorResponse(c, fiber.StatusBadRequest, "Category ID is required", errors.New("missing id parameter"))
+    }
+
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", err)
+    }
+    if id == uuid.Nil {
+        return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", errors.New("uuid is nil"))
+    }
+
+    if err := h.svc.DeleteCategory(c.Context(), id); err != nil {
+        // Map common error cases to appropriate status codes
+        if errors.Is(err, gorm.ErrRecordNotFound) || strings.Contains(err.Error(), "not found") {
+            return h.errorResponse(c, fiber.StatusNotFound, "Category not found", err)
+        }
+        if strings.Contains(strings.ToLower(err.Error()), "invalid category id") {
+            return h.errorResponse(c, fiber.StatusBadRequest, "Invalid category ID", err)
+        }
+        return h.errorResponse(c, fiber.StatusInternalServerError, "Failed to delete category", err)
+    }
+
+    return h.successResponse(c, fiber.Map{"id": id}, "Category deleted successfully")
 }
 
 func atoiDefault(s string, d int) int {
