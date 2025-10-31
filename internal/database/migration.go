@@ -670,6 +670,42 @@ func getMigrations() []*gormigrate.Migration {
                 return tx.Exec("DELETE FROM categories WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
             },
         },
+        {
+            ID: "0024_update_category_descriptions",
+            Migrate: func(tx *gorm.DB) error {
+                log.Println("Updating default product category descriptions (idempotent upsert)...")
+                type pair struct{ Name, Desc string }
+                items := []pair{
+                    {"Condiments", "Sauces, spices, dressings, and seasonings"},
+                    {"Oils", "Cooking oils and sprays"},
+                    {"Pap and purees", "Pap, baby food, purees, and cereal blends"},
+                    {"Proteins", "Meat, fish, eggs, and plant proteins"},
+                    {"Tubers", "Yams, potatoes, cassava, and other root crops"},
+                    {"Grains and Staples", "Rice, pasta, flour, cereals, and staple foods"},
+                    {"Vegetables", "Leafy greens, root vegetables, and mixed veg"},
+                    {"Fresh produce", "Fresh fruits and vegetables"},
+                    {"Pepper mix", "Blended peppers, sauces, and spice mixes"},
+                    {"Fruits", "Fresh and packaged fruits"},
+                    {"Provisions", "Pantry essentials and dry goods"},
+                    {"Detergent and Laundry", "Detergents, soaps, and laundry supplies"},
+                }
+                for _, it := range items {
+                    if err := tx.Exec(
+                        "INSERT INTO categories (name, description, is_active, created_at, updated_at) VALUES (?, ?, TRUE, NOW(), NOW()) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = NOW()",
+                        it.Name, it.Desc,
+                    ).Error; err != nil {
+                        log.Printf("Failed to upsert category %s: %v", it.Name, err)
+                        return err
+                    }
+                }
+                log.Println("✅ Category descriptions updated (and seeded if missing)")
+                return nil
+            },
+            Rollback: func(tx *gorm.DB) error {
+                log.Println("Clearing descriptions for default product categories (rollback)...")
+                return tx.Exec("UPDATE categories SET description = '' WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
+            },
+        },
     }
 }
 
