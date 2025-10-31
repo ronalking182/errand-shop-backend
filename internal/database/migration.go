@@ -622,6 +622,21 @@ func getMigrations() []*gormigrate.Migration {
                 return tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error
             },
         },
+        {
+            ID: "0022_ensure_products_categories_tables",
+            Migrate: func(tx *gorm.DB) error {
+                log.Println("Ensuring products, categories, and stock_history tables exist (idempotent)...")
+                return tx.AutoMigrate(
+                    &products.Category{},
+                    &products.Product{},
+                    &products.StockHistory{},
+                )
+            },
+            Rollback: func(tx *gorm.DB) error {
+                log.Println("Rollback skipped for 0022 (no destructive changes).")
+                return nil
+            },
+        },
     }
 }
 

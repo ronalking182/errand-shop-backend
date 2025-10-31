@@ -93,6 +93,15 @@ func ConnectDB(dsn string) *gorm.DB {
             log.Printf("⚠️ Failed to check to_regclass for orders: %v", err)
         }
 
+        // Check categories table visibility (public and default schema resolution)
+        var publicCategories, defaultCategories sql.NullString
+        row = DB.Raw("select to_regclass('public.categories'), to_regclass('categories')").Row()
+        if err := row.Scan(&publicCategories, &defaultCategories); err == nil {
+            log.Printf("ℹ️ to_regclass public.categories='%v', categories='%v'", publicCategories.String, defaultCategories.String)
+        } else {
+            log.Printf("⚠️ Failed to check to_regclass for categories: %v", err)
+        }
+
         // Count applied gorm migrations (table name: gorm_migrations)
         var migCount int
         if err := DB.Raw("select count(*) from gorm_migrations").Scan(&migCount).Error; err == nil {
