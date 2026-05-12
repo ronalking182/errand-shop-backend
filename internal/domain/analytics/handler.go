@@ -1,6 +1,8 @@
 package analytics
 
 import (
+	"log"
+
 	"errandShop/internal/presenter"
 	"errandShop/internal/validation"
 
@@ -18,7 +20,7 @@ func NewAnalyticsHandler(service AnalyticsService) *AnalyticsHandler {
 // GET /api/v1/dashboard/data - New dashboard endpoint matching frontend requirements
 func (h *AnalyticsHandler) GetDashboardData(c *fiber.Ctx) error {
 	timeRange := c.Query("timeRange", "month")
-	
+
 	// Validate timeRange
 	validRanges := map[string]bool{"today": true, "week": true, "month": true}
 	if !validRanges[timeRange] {
@@ -27,6 +29,7 @@ func (h *AnalyticsHandler) GetDashboardData(c *fiber.Ctx) error {
 
 	dashboard, err := h.service.GetDashboardData(timeRange)
 	if err != nil {
+		log.Printf("GetDashboardData(%s): %v", timeRange, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"error":   "Failed to get dashboard data",
