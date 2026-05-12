@@ -1,9 +1,14 @@
 package analytics
 
 import (
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
+
+// revenueOrderStatuses are order rows counted toward revenue (amounts live in orders.total_amount, kobo).
+// Align with GetTodaySales(); avoids legacy "completed" / total_kobo which do not exist in the orders schema.
+var revenueOrderStatuses = []string{"delivered", "confirmed"}
 
 type AnalyticsRepository interface {
 	// Dashboard methods
@@ -12,19 +17,19 @@ type AnalyticsRepository interface {
 	GetRecentOrders(limit int) ([]RecentOrder, error)
 	GetLowStockProducts(threshold int) ([]LowStockProduct, error)
 	GetMobileAppUsersCount(startDate, endDate time.Time) (int64, error)
-	
+
 	// Individual dashboard metrics methods
 	GetTodaySales() (float64, error)
 	GetActiveUsers() (int64, error)
 	GetTotalProducts() (int64, error)
 	GetCouponsAnalytics() (int64, error)
-	
+
 	// Reports methods
 	GetSalesOverview(startDate, endDate time.Time, period string) (*SalesOverviewData, error)
 	GetTopProductsReport(startDate, endDate time.Time, limit int) ([]TopProduct, error)
 	GetCouponPerformance(startDate, endDate time.Time) ([]CouponPerformance, error)
 	GetStorePerformance(startDate, endDate time.Time) ([]StorePerformance, error)
-	
+
 	// Legacy methods (keeping for backward compatibility)
 	GetDashboardMetrics(startDate, endDate time.Time) (*DashboardMetrics, error)
 	GetSalesAnalytics(startDate, endDate time.Time) (*SalesAnalytics, error)
@@ -49,11 +54,12 @@ func NewAnalyticsRepository(db *gorm.DB) AnalyticsRepository {
 func (r *analyticsRepository) GetDashboardMetrics(startDate, endDate time.Time) (*DashboardMetrics, error) {
 	var metrics DashboardMetrics
 
-	// Total Revenue
+	// Total Revenue (total_amount is kobo; legacy queries used missing total_kobo + status "completed")
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0) as total_revenue").
-		Where("status = ? AND created_at BETWEEN ? AND ?", "completed", startDate, endDate).
+		Select("COALESCE(SUM(total_amount), 0) as total_revenue").
+		Where("status IN ? AND created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
 		Scan(&metrics.TotalRevenue)
+	metrics.TotalRevenue /= 100.0
 
 	// Total Orders
 	r.db.Table("orders").
@@ -70,7 +76,7 @@ func (r *analyticsRepository) GetDashboardMetrics(startDate, endDate time.Time) 
 		Where("is_active = ?", true).
 		Count(&metrics.TotalProducts)
 
-	// Average Order Value
+	// Average Order Value (revenue numerator is fulfilled subset; denominator is all orders in range — legacy behavior)
 	if metrics.TotalOrders > 0 {
 		metrics.AverageOrderValue = metrics.TotalRevenue / float64(metrics.TotalOrders)
 	}
@@ -81,11 +87,12 @@ func (r *analyticsRepository) GetDashboardMetrics(startDate, endDate time.Time) 
 func (r *analyticsRepository) GetSalesAnalytics(startDate, endDate time.Time) (*SalesAnalytics, error) {
 	var analytics SalesAnalytics
 
-	// Total Revenue and Orders
+	// Total Revenue and Orders (total_amount in kobo)
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0) as total_revenue, COUNT(*) as total_orders").
-		Where("status = ? AND created_at BETWEEN ? AND ?", "completed", startDate, endDate).
+		Select("COALESCE(SUM(total_amount), 0) as total_revenue, COUNT(*) as total_orders").
+		Where("status IN ? AND created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
 		Scan(&analytics)
+	analytics.TotalRevenue /= 100.0
 
 	// Average Order Value
 	if analytics.TotalOrders > 0 {
@@ -198,11 +205,15 @@ func (r *analyticsRepository) GetRevenueByDay(startDate, endDate time.Time) ([]D
 	var dataPoints []DataPoint
 
 	r.db.Table("orders").
-		Select("DATE(created_at) as date, COALESCE(SUM(total_kobo), 0) as value").
-		Where("status = ? AND created_at BETWEEN ? AND ?", "completed", startDate, endDate).
+		Select("DATE(created_at) as date, COALESCE(SUM(total_amount), 0) as value").
+		Where("status IN ? AND created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
 		Group("DATE(created_at)").
 		Order("date").
 		Scan(&dataPoints)
+
+	for i := range dataPoints {
+		dataPoints[i].Value /= 100.0
+	}
 
 	return dataPoints, nil
 }
@@ -211,14 +222,18 @@ func (r *analyticsRepository) GetTopProducts(startDate, endDate time.Time, limit
 	var products []ProductSales
 
 	r.db.Table("order_items oi").
-		Select("p.id as product_id, p.name as product_name, SUM(oi.quantity) as quantity_sold, SUM(oi.price_kobo * oi.quantity) as revenue").
+		Select("p.id as product_id, p.name as product_name, SUM(oi.quantity) as quantity_sold, SUM(COALESCE(oi.unit_price, 0) * oi.quantity) as revenue").
 		Joins("JOIN products p ON oi.product_id = p.id").
 		Joins("JOIN orders o ON oi.order_id = o.id").
-		Where("o.status = ? AND o.created_at BETWEEN ? AND ?", "completed", startDate, endDate).
+		Where("o.status IN ? AND o.created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
 		Group("p.id, p.name").
 		Order("revenue DESC").
 		Limit(limit).
 		Scan(&products)
+
+	for i := range products {
+		products[i].Revenue /= 100.0
+	}
 
 	return products, nil
 }
@@ -229,11 +244,15 @@ func (r *analyticsRepository) GetTopCustomers(startDate, endDate time.Time, limi
 	r.db.Table("orders o").
 		Select("c.id as customer_id, CONCAT(c.first_name, ' ', c.last_name) as customer_name, COUNT(o.id) as total_orders, SUM(o.total_amount) as total_spent").
 		Joins("JOIN customers c ON o.customer_id = c.user_id").
-		Where("o.status = ? AND o.created_at BETWEEN ? AND ?", "completed", startDate, endDate).
+		Where("o.status IN ? AND o.created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
 		Group("c.id, c.first_name, c.last_name").
 		Order("total_spent DESC").
 		Limit(limit).
 		Scan(&customers)
+
+	for i := range customers {
+		customers[i].TotalSpent /= 100.0
+	}
 
 	return customers, nil
 }
@@ -241,22 +260,22 @@ func (r *analyticsRepository) GetTopCustomers(startDate, endDate time.Time, limi
 // New Dashboard Methods
 func (r *analyticsRepository) GetDashboardData(timeRange string) (*DashboardData, error) {
 	startDate, endDate := r.getDateRangeFromString(timeRange)
-	
+
 	kpis, err := r.GetDashboardKPIs(startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	recentOrders, err := r.GetRecentOrders(10)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	lowStockProducts, err := r.GetLowStockProducts(10)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &DashboardData{
 		KPIs:             *kpis,
 		RecentOrders:     recentOrders,
@@ -266,78 +285,87 @@ func (r *analyticsRepository) GetDashboardData(timeRange string) (*DashboardData
 
 func (r *analyticsRepository) GetDashboardKPIs(startDate, endDate time.Time) (*DashboardKPIs, error) {
 	var kpis DashboardKPIs
-	
-	// Total Sales (completed orders)
+
+	// Total Sales (total_amount kobo → naira on dashboard KPIs)
+	var totalKobo float64
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0)").
-		Where("status = ? AND created_at BETWEEN ? AND ?", "completed", startDate, endDate).
-		Scan(&kpis.TotalSales)
-	
+		Select("COALESCE(SUM(total_amount), 0)").
+		Where("status IN ? AND created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
+		Scan(&totalKobo)
+	kpis.TotalSales = totalKobo / 100.0
+
 	// Active Mobile App Users (users with role 'customer')
 	activeUsers, _ := r.GetMobileAppUsersCount(startDate, endDate)
 	kpis.ActiveUsers = activeUsers
-	
+
 	// Total Products (active products)
 	r.db.Table("products").
 		Where("is_active = ?", true).
 		Count(&kpis.TotalProducts)
-	
+
 	// Coupons Issued (assuming we have a coupons table)
 	r.db.Table("coupons").
 		Where("created_at BETWEEN ? AND ?", startDate, endDate).
 		Count(&kpis.CouponsIssued)
-	
+
 	return &kpis, nil
 }
 
 func (r *analyticsRepository) GetMobileAppUsersCount(startDate, endDate time.Time) (int64, error) {
 	var count int64
-	
+
 	// Count users with role 'customer' (mobile app users) who have been active
 	r.db.Table("users").
-		Where("role = ? AND status = ? AND (last_login_at BETWEEN ? AND ? OR created_at BETWEEN ? AND ?)", 
+		Where("role = ? AND status = ? AND (last_login_at BETWEEN ? AND ? OR created_at BETWEEN ? AND ?)",
 			"customer", "active", startDate, endDate, startDate, endDate).
 		Count(&count)
-	
+
 	return count, nil
 }
 
 func (r *analyticsRepository) GetRecentOrders(limit int) ([]RecentOrder, error) {
 	var orders []RecentOrder
-	
+
 	r.db.Table("orders o").
 		Select("o.id, CONCAT(c.first_name, ' ', c.last_name) as customer_name, o.total_amount as amount, o.status, o.created_at").
 		Joins("JOIN customers c ON o.customer_id = c.user_id").
 		Order("o.created_at DESC").
 		Limit(limit).
 		Scan(&orders)
-	
-	// Convert timestamps to ISO strings
+
+	// Normalize created_at formats from Postgres/GORM scans
 	for i := range orders {
-		if orders[i].CreatedAt != "" {
-			// Parse and format the timestamp
-			if t, err := time.Parse("2006-01-02 15:04:05", orders[i].CreatedAt); err == nil {
+		orders[i].Amount /= 100.0
+		if ts := orders[i].CreatedAt; ts != "" {
+			if t, err := time.Parse(time.RFC3339, ts); err == nil {
+				orders[i].CreatedAt = t.Format(time.RFC3339)
+			} else if t, err := time.Parse("2006-01-02 15:04:05", ts); err == nil {
+				orders[i].CreatedAt = t.Format(time.RFC3339)
+			} else if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
 				orders[i].CreatedAt = t.Format(time.RFC3339)
 			}
 		}
 	}
-	
+
 	return orders, nil
 }
 
 func (r *analyticsRepository) GetLowStockProducts(threshold int) ([]LowStockProduct, error) {
 	var products []LowStockProduct
-	
+
 	err := r.db.Table("products").
-		Select("id, name, sku, stock_quantity as current_stock, CAST(? AS INTEGER) as low_stock_threshold", threshold).
+		Select("id, name, sku, stock_quantity AS current_stock").
 		Where("stock_quantity <= ? AND is_active = ?", threshold, true).
 		Order("stock_quantity ASC").
 		Scan(&products).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+	for i := range products {
+		products[i].LowStockThreshold = threshold
+	}
+
 	return products, nil
 }
 
@@ -348,63 +376,67 @@ func (r *analyticsRepository) GetSalesOverview(startDate, endDate time.Time, per
 	weekStart := today.AddDate(0, 0, -int(today.Weekday()))
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
-	
+
 	var overview SalesOverviewData
-	
+
 	// Today's sales
 	var todayValue float64
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0)").
-		Where("status = ? AND created_at >= ?", "completed", today).
+		Select("COALESCE(SUM(total_amount), 0)").
+		Where("status IN ? AND created_at >= ?", revenueOrderStatuses, today).
 		Scan(&todayValue)
-	overview.TodaySales = TrendData{Value: todayValue, Trend: "up", Change: 5.2}
-	
+	overview.TodaySales = TrendData{Value: todayValue / 100.0, Trend: "up", Change: 5.2}
+
 	// Weekly sales
 	var weeklyValue float64
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0)").
-		Where("status = ? AND created_at >= ?", "completed", weekStart).
+		Select("COALESCE(SUM(total_amount), 0)").
+		Where("status IN ? AND created_at >= ?", revenueOrderStatuses, weekStart).
 		Scan(&weeklyValue)
-	overview.WeeklySales = TrendData{Value: weeklyValue, Trend: "up", Change: 12.5}
-	
+	overview.WeeklySales = TrendData{Value: weeklyValue / 100.0, Trend: "up", Change: 12.5}
+
 	// Monthly sales
 	var monthlyValue float64
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0)").
-		Where("status = ? AND created_at >= ?", "completed", monthStart).
+		Select("COALESCE(SUM(total_amount), 0)").
+		Where("status IN ? AND created_at >= ?", revenueOrderStatuses, monthStart).
 		Scan(&monthlyValue)
-	overview.MonthlySales = TrendData{Value: monthlyValue, Trend: "stable", Change: 0.8}
-	
+	overview.MonthlySales = TrendData{Value: monthlyValue / 100.0, Trend: "stable", Change: 0.8}
+
 	// Yearly sales
 	var yearlyValue float64
 	r.db.Table("orders").
-		Select("COALESCE(SUM(total_kobo), 0)").
-		Where("status = ? AND created_at >= ?", "completed", yearStart).
+		Select("COALESCE(SUM(total_amount), 0)").
+		Where("status IN ? AND created_at >= ?", revenueOrderStatuses, yearStart).
 		Scan(&yearlyValue)
-	overview.YearlySales = TrendData{Value: yearlyValue, Trend: "up", Change: 18.3}
-	
+	overview.YearlySales = TrendData{Value: yearlyValue / 100.0, Trend: "up", Change: 18.3}
+
 	return &overview, nil
 }
 
 func (r *analyticsRepository) GetTopProductsReport(startDate, endDate time.Time, limit int) ([]TopProduct, error) {
 	var products []TopProduct
-	
+
 	r.db.Table("order_items oi").
-		Select("p.name, SUM(oi.quantity) as units_sold, SUM(oi.price_kobo * oi.quantity) as revenue, 'up' as trend").
+		Select("p.name, SUM(oi.quantity) as units_sold, SUM(COALESCE(oi.unit_price, 0) * oi.quantity) as revenue, 'up' as trend").
 		Joins("JOIN products p ON oi.product_id = p.id").
 		Joins("JOIN orders o ON oi.order_id = o.id").
-		Where("o.status = ? AND o.created_at BETWEEN ? AND ?", "completed", startDate, endDate).
+		Where("o.status IN ? AND o.created_at BETWEEN ? AND ?", revenueOrderStatuses, startDate, endDate).
 		Group("p.id, p.name").
 		Order("revenue DESC").
 		Limit(limit).
 		Scan(&products)
-	
+
+	for i := range products {
+		products[i].Revenue /= 100.0
+	}
+
 	return products, nil
 }
 
 func (r *analyticsRepository) GetCouponPerformance(startDate, endDate time.Time) ([]CouponPerformance, error) {
 	var coupons []CouponPerformance
-	
+
 	// This is a placeholder - adjust based on your actual coupon/discount system
 	r.db.Table("coupons c").
 		Select("c.code, COUNT(o.id) as usage, COALESCE(SUM(o.discount_kobo), 0) as revenue, c.type").
@@ -413,22 +445,27 @@ func (r *analyticsRepository) GetCouponPerformance(startDate, endDate time.Time)
 		Group("c.id, c.code, c.type").
 		Order("usage DESC").
 		Scan(&coupons)
-	
+
 	return coupons, nil
 }
 
 func (r *analyticsRepository) GetStorePerformance(startDate, endDate time.Time) ([]StorePerformance, error) {
 	var stores []StorePerformance
-	
+
 	// This assumes you have a stores table and orders are linked to stores
 	r.db.Table("stores s").
-		Select("s.name, COALESCE(SUM(o.total_kobo), 0) as revenue, COUNT(o.id) as orders, 15.5 as growth, COALESCE(AVG(o.total_kobo), 0) as average_order_value").
-		Joins("LEFT JOIN orders o ON o.store_id = s.id AND o.status = 'completed' AND o.created_at BETWEEN ? AND ?", startDate, endDate).
+		Select("s.name, COALESCE(SUM(o.total_amount), 0) as revenue, COUNT(o.id) as orders, 15.5 as growth, COALESCE(AVG(o.total_amount), 0) as average_order_value").
+		Joins(`LEFT JOIN orders o ON o.store_id = s.id AND o.status IN ('delivered','confirmed') AND o.created_at BETWEEN ? AND ?`, startDate, endDate).
 		Where("s.is_active = ?", true).
 		Group("s.id, s.name").
 		Order("revenue DESC").
 		Scan(&stores)
-	
+
+	for i := range stores {
+		stores[i].Revenue /= 100.0
+		stores[i].AverageOrderValue /= 100.0
+	}
+
 	return stores, nil
 }
 
@@ -436,26 +473,26 @@ func (r *analyticsRepository) GetStorePerformance(startDate, endDate time.Time) 
 func (r *analyticsRepository) GetTodaySales() (float64, error) {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	
+
 	var totalSales float64
 	r.db.Table("orders").
 		Select("COALESCE(SUM(total_amount), 0)").
 		Where("status IN (?, ?) AND created_at >= ?", "delivered", "confirmed", today).
 		Scan(&totalSales)
-	
+
 	return totalSales / 100.0, nil // Convert from kobo to naira
 }
 
 func (r *analyticsRepository) GetActiveUsers() (int64, error) {
 	now := time.Now()
 	last24Hours := now.AddDate(0, 0, -1)
-	
+
 	var count int64
 	r.db.Table("users").
-		Where("role = ? AND status = ? AND (last_login_at >= ? OR created_at >= ?)", 
+		Where("role = ? AND status = ? AND (last_login_at >= ? OR created_at >= ?)",
 			"customer", "active", last24Hours, last24Hours).
 		Count(&count)
-	
+
 	return count, nil
 }
 
@@ -464,7 +501,7 @@ func (r *analyticsRepository) GetTotalProducts() (int64, error) {
 	r.db.Table("products").
 		Where("is_active = ?", true).
 		Count(&count)
-	
+
 	return count, nil
 }
 
@@ -473,7 +510,7 @@ func (r *analyticsRepository) GetCouponsAnalytics() (int64, error) {
 	r.db.Table("coupons").
 		Where("is_active = ?", true).
 		Count(&count)
-	
+
 	return count, nil
 }
 

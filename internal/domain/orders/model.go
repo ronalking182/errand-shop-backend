@@ -4,9 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errandShop/internal/domain/products"
-	"time"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"time"
 )
 
 // Cart represents a user's shopping cart
@@ -34,43 +34,43 @@ type CartItem struct {
 
 // Order represents a customer order
 type Order struct {
-	ID                uuid.UUID     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	CustomerID        uuid.UUID     `gorm:"type:uuid;not null;column:customer_id" json:"customerId"`
-	DeliveryAddressID *uint         `gorm:"column:delivery_address_id" json:"deliveryAddressId"`
-	Status            OrderStatus   `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
-	PaymentStatus     PaymentStatus `gorm:"type:varchar(50);not null;default:'unpaid'" json:"paymentStatus"`
-	IdempotencyKey    string        `gorm:"type:varchar(255);uniqueIndex" json:"idempotencyKey"`
-	CouponCode        *string       `gorm:"type:varchar(100)" json:"couponCode"`
-	CouponDiscount    int64         `gorm:"default:0" json:"couponDiscount"` // in kobo
-	ItemsSubtotal     int64         `gorm:"not null" json:"itemsSubtotal"`   // in kobo
-	DeliveryFee       int64         `gorm:"default:0" json:"deliveryFee"`    // in kobo
-	ServiceFee        int64         `gorm:"default:0" json:"serviceFee"`     // in kobo
-	TotalAmount       int64         `gorm:"not null" json:"totalAmount"`     // in kobo
-	CustomRequests    UUIDSlice     `gorm:"type:jsonb;default:'[]'" json:"customRequests"` // Custom request IDs
-	Notes             string        `gorm:"type:text" json:"notes"`
-	EstimatedDelivery *time.Time    `json:"estimatedDelivery"`
-	DeliveredAt       *time.Time    `json:"deliveredAt"`
-	CancelledAt       *time.Time    `json:"cancelledAt"`
-	CancellationReason string       `gorm:"type:text" json:"cancellationReason"`
-	Items             []OrderItem   `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"items"`
-	StatusHistory     []OrderStatusHistory `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"statusHistory,omitempty"`
-	CreatedAt         time.Time     `gorm:"column:created_at;autoCreateTime" json:"createdAt"`
-	UpdatedAt         time.Time     `gorm:"column:updated_at;autoUpdateTime" json:"updatedAt"` 
+	ID                 uuid.UUID            `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	CustomerID         uuid.UUID            `gorm:"type:uuid;not null;column:customer_id" json:"customerId"`
+	DeliveryAddressID  *uint                `gorm:"column:delivery_address_id" json:"deliveryAddressId"`
+	Status             OrderStatus          `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
+	PaymentStatus      PaymentStatus        `gorm:"type:varchar(50);not null;default:'unpaid'" json:"paymentStatus"`
+	IdempotencyKey     string               `gorm:"type:varchar(255);uniqueIndex" json:"idempotencyKey"`
+	CouponCode         *string              `gorm:"type:varchar(100)" json:"couponCode"`
+	CouponDiscount     int64                `gorm:"default:0" json:"couponDiscount"`               // in kobo
+	ItemsSubtotal      int64                `gorm:"not null" json:"itemsSubtotal"`                 // in kobo
+	DeliveryFee        int64                `gorm:"default:0" json:"deliveryFee"`                  // in kobo
+	ServiceFee         int64                `gorm:"default:0" json:"serviceFee"`                   // in kobo
+	TotalAmount        int64                `gorm:"not null" json:"totalAmount"`                   // in kobo
+	CustomRequests     UUIDSlice            `gorm:"type:jsonb;default:'[]'" json:"customRequests"` // Custom request IDs
+	Notes              string               `gorm:"type:text" json:"notes"`
+	EstimatedDelivery  *time.Time           `json:"estimatedDelivery"`
+	DeliveredAt        *time.Time           `json:"deliveredAt"`
+	CancelledAt        *time.Time           `json:"cancelledAt"`
+	CancellationReason string               `gorm:"type:text" json:"cancellationReason"`
+	Items              []OrderItem          `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"items"`
+	StatusHistory      []OrderStatusHistory `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"statusHistory,omitempty"`
+	CreatedAt          time.Time            `gorm:"column:created_at;autoCreateTime" json:"createdAt"`
+	UpdatedAt          time.Time            `gorm:"column:updated_at;autoUpdateTime" json:"updatedAt"`
 }
 
 // OrderItem represents an item within an order
 type OrderItem struct {
-	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	OrderID   uuid.UUID `gorm:"type:uuid;not null;column:order_id" json:"orderId"`
-	ProductID uuid.UUID `gorm:"type:uuid;not null;column:product_id" json:"productId"`
-	Name      string    `gorm:"type:varchar(255);not null" json:"name"`
-	SKU       string    `gorm:"type:varchar(100)" json:"sku"`
-	Source    string    `gorm:"type:varchar(50);default:'catalog'" json:"source"`
-	Quantity  int       `gorm:"not null;check:quantity > 0" json:"quantity"`
-	UnitPrice int64     `gorm:"not null" json:"unitPrice"` // Price per unit in kobo at time of order
-	TotalPrice int64    `gorm:"not null" json:"totalPrice"` // Total price for this item in kobo
-	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"createdAt"`
-	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updatedAt"`
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	OrderID    uuid.UUID `gorm:"type:uuid;not null;column:order_id" json:"orderId"`
+	ProductID  uuid.UUID `gorm:"type:uuid;not null;column:product_id" json:"productId"`
+	Name       string    `gorm:"type:varchar(255);not null" json:"name"`
+	SKU        string    `gorm:"type:varchar(100)" json:"sku"`
+	Source     string    `gorm:"type:varchar(50);default:'catalog'" json:"source"`
+	Quantity   int       `gorm:"not null;check:quantity > 0" json:"quantity"`
+	UnitPrice  int64     `gorm:"not null" json:"unitPrice"`  // Price per unit in kobo at time of order
+	TotalPrice int64     `gorm:"not null" json:"totalPrice"` // Total price for this item in kobo
+	CreatedAt  time.Time `gorm:"column:created_at;autoCreateTime" json:"createdAt"`
+	UpdatedAt  time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updatedAt"`
 
 	// Relationships
 	Order   Order            `gorm:"foreignKey:OrderID" json:"-"`
@@ -79,13 +79,13 @@ type OrderItem struct {
 
 // OrderStatusHistory tracks status changes for orders
 type OrderStatusHistory struct {
-	ID         uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	OrderID    uuid.UUID   `json:"orderId" gorm:"type:uuid;not null;index;column:order_id"`
+	ID         uuid.UUID    `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	OrderID    uuid.UUID    `json:"orderId" gorm:"type:uuid;not null;index;column:order_id"`
 	FromStatus *OrderStatus `json:"fromStatus" gorm:"size:50;column:from_status"`
-	ToStatus   OrderStatus `json:"toStatus" gorm:"size:50;not null;column:to_status"`
-	ByAdminID  *uuid.UUID  `json:"byAdminId" gorm:"type:uuid;column:by_admin_id"`
-	Note       string      `json:"note" gorm:"type:text;column:note"`
-	CreatedAt  time.Time   `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
+	ToStatus   OrderStatus  `json:"toStatus" gorm:"size:50;not null;column:to_status"`
+	ByAdminID  *uuid.UUID   `json:"byAdminId" gorm:"type:uuid;column:by_admin_id"`
+	Note       string       `json:"note" gorm:"type:text;column:note"`
+	CreatedAt  time.Time    `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
 
 	// Relationships
 	Order Order `gorm:"foreignKey:OrderID" json:"-"`
@@ -99,24 +99,24 @@ func (OrderStatusHistory) TableName() string {
 type OrderStatus string
 
 const (
-	OrderStatusPending    OrderStatus = "pending"
-	OrderStatusConfirmed  OrderStatus = "confirmed"
-	OrderStatusPreparing  OrderStatus = "preparing"
+	OrderStatusPending        OrderStatus = "pending"
+	OrderStatusConfirmed      OrderStatus = "confirmed"
+	OrderStatusPreparing      OrderStatus = "preparing"
 	OrderStatusOutForDelivery OrderStatus = "out_for_delivery"
-	OrderStatusDelivered  OrderStatus = "delivered"
-	OrderStatusCancelled  OrderStatus = "cancelled"
+	OrderStatusDelivered      OrderStatus = "delivered"
+	OrderStatusCancelled      OrderStatus = "cancelled"
 )
 
 type PaymentStatus string
 
 const (
-	PaymentStatusUnpaid     PaymentStatus = "unpaid"
-	PaymentStatusPending    PaymentStatus = "pending"
-	PaymentStatusPaid       PaymentStatus = "paid"
+	PaymentStatusUnpaid            PaymentStatus = "unpaid"
+	PaymentStatusPending           PaymentStatus = "pending"
+	PaymentStatusPaid              PaymentStatus = "paid"
 	PaymentStatusPartiallyRefunded PaymentStatus = "partially_refunded"
-	PaymentStatusRefunded   PaymentStatus = "refunded"
-	PaymentStatusFailed     PaymentStatus = "failed"
-	PaymentStatusExpired    PaymentStatus = "expired"
+	PaymentStatusRefunded          PaymentStatus = "refunded"
+	PaymentStatusFailed            PaymentStatus = "failed"
+	PaymentStatusExpired           PaymentStatus = "expired"
 )
 
 // Helper methods for Order
@@ -142,13 +142,13 @@ func (o *Order) BeforeCreate(tx *gorm.DB) error {
 		o.ID = uuid.New()
 	}
 	o.TotalAmount = o.CalculateTotal()
-	
+
 	// Set estimated delivery to 2 hours from now if not already set
 	if o.EstimatedDelivery == nil {
 		estimatedTime := time.Now().Add(2 * time.Hour)
 		o.EstimatedDelivery = &estimatedTime
 	}
-	
+
 	return nil
 }
 
@@ -195,9 +195,25 @@ func (us *UUIDSlice) Scan(value interface{}) error {
 
 	switch v := value.(type) {
 	case []byte:
-		return json.Unmarshal(v, us)
+		if len(v) == 0 || string(v) == "null" {
+			*us = nil
+			return nil
+		}
+		if err := json.Unmarshal(v, us); err != nil {
+			*us = nil
+			return nil
+		}
+		return nil
 	case string:
-		return json.Unmarshal([]byte(v), us)
+		if v == "" || v == "null" {
+			*us = nil
+			return nil
+		}
+		if err := json.Unmarshal([]byte(v), us); err != nil {
+			*us = nil
+			return nil
+		}
+		return nil
 	default:
 		return nil
 	}
