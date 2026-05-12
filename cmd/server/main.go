@@ -1,11 +1,11 @@
 package main
 
 import (
-    "errandShop/config"
-    "errandShop/internal/database"
-    "errandShop/internal/domain/analytics"
-    "errandShop/internal/domain/auth"
-    "errandShop/internal/domain/chat"
+	"errandShop/config"
+	"errandShop/internal/database"
+	"errandShop/internal/domain/analytics"
+	"errandShop/internal/domain/auth"
+	"errandShop/internal/domain/chat"
 	"errandShop/internal/domain/coupons"
 	"errandShop/internal/domain/custom_requests"
 	"errandShop/internal/domain/customers"
@@ -18,52 +18,78 @@ import (
 	"errandShop/internal/middleware"
 	"errandShop/internal/services/audit"
 	"errandShop/internal/services/email"
-    v1 "errandShop/internal/transport/http/v1"
-    "fmt"
-    "log"
-    "strings"
+	v1 "errandShop/internal/transport/http/v1"
+	"fmt"
+	"log"
+	"strings"
 
 	"errandShop/internal/http/handlers"
 	"errandShop/internal/repos"
 	"github.com/gofiber/fiber/v2"
-    "github.com/gofiber/fiber/v2/middleware/cors"
-    "github.com/gofiber/fiber/v2/middleware/logger"
-    "github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 )
 
 // Create a temporary payments service interface for orders initialization
 type tempPaymentService struct{}
 
 func (t *tempPaymentService) InitializePayment(req payments.CreatePaymentRequest, customerID uint) (*payments.PaymentInitResponse, error) {
-    return nil, fmt.Errorf("payment service not yet initialized")
+	return nil, fmt.Errorf("payment service not yet initialized")
 }
 
-// Allowed origins list and helpers
-func allowedOrigins() string {
-    return strings.Join([]string{
-        "https://v0-errand-shop-dashboard.vercel.app",
-        "https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app",
-        "https://v0-errand-shop-dashboard-jcjvf4fer-ronalking182s-projects.vercel.app",
-        "http://localhost:5173",
-    }, ",")
+// CORS CSV built once from defaults + ALLOWED_ORIGINS / AllowedOrigins env (via config).
+var corsAllowCSV string
+
+func initCORSAllowList(cfg *config.Config) {
+	seen := make(map[string]struct{})
+	out := []string{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, o := range []string{
+		"https://v0-errand-shop-dashboard.vercel.app",
+		"https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app",
+		"https://v0-errand-shop-dashboard-jcjvf4fer-ronalking182s-projects.vercel.app",
+		"http://localhost:5173",
+		"http://localhost:3000",
+		"http://localhost:3001",
+	} {
+		add(o)
+	}
+	for _, o := range strings.Split(cfg.AllowedOrigins, ",") {
+		add(o)
+	}
+	corsAllowCSV = strings.Join(out, ",")
 }
+
+func allowedOrigins() string { return corsAllowCSV }
 
 func isAllowedOrigin(origin string) bool {
-    if origin == "" {
-        return false
-    }
-    for _, o := range strings.Split(allowedOrigins(), ",") {
-        if strings.TrimSpace(o) == origin {
-            return true
-        }
-    }
-    return false
+	if origin == "" {
+		return false
+	}
+	for _, o := range strings.Split(corsAllowCSV, ",") {
+		if strings.TrimSpace(o) == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
 	// 🔧 Configuration Setup
 	log.Println("🚀 Starting Errand Shop Backend...")
 	cfg := config.LoadConfig() // ✅ Fixed: was config.Load()
+	initCORSAllowList(cfg)
 	log.Println("✅ Configuration loaded successfully")
 
 	// 🗄️ Database Connection & Migration
@@ -84,7 +110,7 @@ func main() {
 
 	// 🌐 Initialize Fiber Web Framework
 	log.Println("🌐 Initializing Fiber app...")
-    app := fiber.New(fiber.Config{
+	app := fiber.New(fiber.Config{
 		// 🚨 Global Error Handler
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -96,102 +122,97 @@ func main() {
 				"error": err.Error(),
 			})
 		},
-    })
+	})
 
-    // OPTIONS synthesis for /api/*: reflect ACAO on allowed origins, no proxy, 200 (placed before CORS)
-    app.Options("/api/*", func(c *fiber.Ctx) error {
-        origin := c.Get("Origin")
-        if isAllowedOrigin(origin) {
-            c.Set("Access-Control-Allow-Origin", origin)
-            c.Set("Access-Control-Allow-Credentials", "true")
-            c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-            c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-            c.Set("Access-Control-Max-Age", "600")
-            c.Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
-            // Return a non-empty body to avoid certain edge/proxy normalizers
-            // from converting 200 responses with empty body into 204 and stripping headers.
-            c.Set("Content-Type", "text/plain; charset=utf-8")
-            return c.Status(fiber.StatusOK).SendString("ok")
-        }
-        // Disallowed origin: 403 with Vary: Origin
-        c.Set("Vary", "Origin")
-        return c.SendStatus(fiber.StatusForbidden)
-    })
+	// OPTIONS synthesis for /api/*: reflect ACAO on allowed origins, no proxy, 200 (placed before CORS)
+	app.Options("/api/*", func(c *fiber.Ctx) error {
+		origin := c.Get("Origin")
+		if isAllowedOrigin(origin) {
+			c.Set("Access-Control-Allow-Origin", origin)
+			c.Set("Access-Control-Allow-Credentials", "true")
+			c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+			c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+			c.Set("Access-Control-Max-Age", "600")
+			c.Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+			// Return a non-empty body to avoid certain edge/proxy normalizers
+			// from converting 200 responses with empty body into 204 and stripping headers.
+			c.Set("Content-Type", "text/plain; charset=utf-8")
+			return c.Status(fiber.StatusOK).SendString("ok")
+		}
+		// Disallowed origin: 403 with Vary: Origin
+		c.Set("Vary", "Origin")
+		return c.SendStatus(fiber.StatusForbidden)
+	})
 
-    // 🌍 CORS must be the first middleware so preflights carry headers
-    log.Println("🌍 Configuring global CORS (first middleware)...")
-    app.Use(cors.New(cors.Config{
-        AllowOrigins:     strings.Join([]string{
-            "https://v0-errand-shop-dashboard.vercel.app",
-            "https://v0-errand-shop-dashboard-git-main-ronalking182s-projects.vercel.app",
-            "https://v0-errand-shop-dashboard-jcjvf4fer-ronalking182s-projects.vercel.app",
-            "http://localhost:5173",
-        }, ","),
-        AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-        ExposeHeaders:    "Set-Cookie",
-        AllowCredentials: true,
-        MaxAge:           600,
-        // Skip handling OPTIONS here so our /api/* synthesis route runs
-        Next: func(c *fiber.Ctx) bool {
-            return c.Method() == fiber.MethodOptions
-        },
-    }))
-    // Pre-injection: ensure ACAO/credentials present for /api/* non-OPTIONS if missing
-    app.Use(func(c *fiber.Ctx) error {
-        origin := c.Get("Origin")
-        if strings.HasPrefix(c.Path(), "/api/") && c.Method() != fiber.MethodOptions && isAllowedOrigin(origin) {
-            if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
-                c.Set("Access-Control-Allow-Origin", origin)
-            }
-            if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
-                c.Set("Access-Control-Allow-Credentials", "true")
-            }
-            // Append Vary: Origin if missing
-            existingVary := string(c.Response().Header.Peek("Vary"))
-            if !strings.Contains(existingVary, "Origin") {
-                if existingVary == "" {
-                    c.Set("Vary", "Origin")
-                } else {
-                    c.Set("Vary", existingVary+", Origin")
-                }
-            }
-        }
-        return c.Next()
-    })
-    // Fallback: after handlers run, append ACAO/credentials/Vary for non-OPTIONS /api/* if missing
-    app.Use(func(c *fiber.Ctx) error {
-        // proceed through handlers first
-        if err := c.Next(); err != nil {
-            return err
-        }
-        origin := c.Get("Origin")
-        if strings.HasPrefix(c.Path(), "/api/") && c.Method() != fiber.MethodOptions && isAllowedOrigin(origin) {
-            // Preserve existing headers; only set if missing
-            if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
-                c.Set("Access-Control-Allow-Origin", origin)
-            }
-            if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
-                c.Set("Access-Control-Allow-Credentials", "true")
-            }
-            // Append Vary: Origin if missing
-            existingVary := string(c.Response().Header.Peek("Vary"))
-            if !strings.Contains(existingVary, "Origin") {
-                if existingVary == "" {
-                    c.Set("Vary", "Origin")
-                } else {
-                    c.Set("Vary", existingVary+", Origin")
-                }
-            }
-        }
-        return nil
-    })
+	// 🌍 CORS must be the first middleware so preflights carry headers
+	log.Println("🌍 Configuring global CORS (first middleware)...")
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     allowedOrigins(),
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		ExposeHeaders:    "Set-Cookie",
+		AllowCredentials: true,
+		MaxAge:           600,
+		// Skip handling OPTIONS here so our /api/* synthesis route runs
+		Next: func(c *fiber.Ctx) bool {
+			return c.Method() == fiber.MethodOptions
+		},
+	}))
+	// Pre-injection: ensure ACAO/credentials present for /api/* non-OPTIONS if missing
+	app.Use(func(c *fiber.Ctx) error {
+		origin := c.Get("Origin")
+		if strings.HasPrefix(c.Path(), "/api/") && c.Method() != fiber.MethodOptions && isAllowedOrigin(origin) {
+			if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
+				c.Set("Access-Control-Allow-Origin", origin)
+			}
+			if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
+				c.Set("Access-Control-Allow-Credentials", "true")
+			}
+			// Append Vary: Origin if missing
+			existingVary := string(c.Response().Header.Peek("Vary"))
+			if !strings.Contains(existingVary, "Origin") {
+				if existingVary == "" {
+					c.Set("Vary", "Origin")
+				} else {
+					c.Set("Vary", existingVary+", Origin")
+				}
+			}
+		}
+		return c.Next()
+	})
+	// Fallback: after handlers run, append ACAO/credentials/Vary for non-OPTIONS /api/* if missing
+	app.Use(func(c *fiber.Ctx) error {
+		// proceed through handlers first
+		if err := c.Next(); err != nil {
+			return err
+		}
+		origin := c.Get("Origin")
+		if strings.HasPrefix(c.Path(), "/api/") && c.Method() != fiber.MethodOptions && isAllowedOrigin(origin) {
+			// Preserve existing headers; only set if missing
+			if len(c.Response().Header.Peek("Access-Control-Allow-Origin")) == 0 {
+				c.Set("Access-Control-Allow-Origin", origin)
+			}
+			if len(c.Response().Header.Peek("Access-Control-Allow-Credentials")) == 0 {
+				c.Set("Access-Control-Allow-Credentials", "true")
+			}
+			// Append Vary: Origin if missing
+			existingVary := string(c.Response().Header.Peek("Vary"))
+			if !strings.Contains(existingVary, "Origin") {
+				if existingVary == "" {
+					c.Set("Vary", "Origin")
+				} else {
+					c.Set("Vary", existingVary+", Origin")
+				}
+			}
+		}
+		return nil
+	})
 
-    // 🛡️ Additional middleware
-    log.Println("🛡️ Setting up logger and recover...")
-    app.Use(logger.New())         // 📝 Request logging
-    app.Use(recover.New())        // 🔄 Panic recovery
-    log.Println("✅ Middleware configured")
+	// 🛡️ Additional middleware
+	log.Println("🛡️ Setting up logger and recover...")
+	app.Use(logger.New())  // 📝 Request logging
+	app.Use(recover.New()) // 🔄 Panic recovery
+	log.Println("✅ Middleware configured")
 
 	// 👥 Initialize Customers Domain (needed for auth service)
 	log.Println("👥 Setting up customers domain...")
@@ -218,11 +239,11 @@ func main() {
 	authHandler := auth.NewHandler(authService)
 	log.Println("✅ Authentication domain initialized")
 
-    // 🛣️ API Routes Setup
-    log.Println("🛣️ Setting up API routes...")
-    api := app.Group("/api/v1")
-    // Security headers and caching policy for API responses (does not touch CORS)
-    api.Use(middleware.APISecurityHeaders())
+	// 🛣️ API Routes Setup
+	log.Println("🛣️ Setting up API routes...")
+	api := app.Group("/api/v1")
+	// Security headers and caching policy for API responses (does not touch CORS)
+	api.Use(middleware.APISecurityHeaders())
 
 	// Add base API info endpoint
 	api.Get("/", func(c *fiber.Ctx) error {
@@ -238,23 +259,23 @@ func main() {
 		})
 	})
 
-    // Diagnostic: force-set ACAO from handler to validate edge behavior
-    api.Get("/cors-test", func(c *fiber.Ctx) error {
-        origin := c.Get("Origin")
-        if isAllowedOrigin(origin) {
-            c.Set("Access-Control-Allow-Origin", origin)
-            c.Set("Access-Control-Allow-Credentials", "true")
-            existingVary := string(c.Response().Header.Peek("Vary"))
-            if !strings.Contains(existingVary, "Origin") {
-                if existingVary == "" {
-                    c.Set("Vary", "Origin")
-                } else {
-                    c.Set("Vary", existingVary+", Origin")
-                }
-            }
-        }
-        return c.SendString("cors ok")
-    })
+	// Diagnostic: force-set ACAO from handler to validate edge behavior
+	api.Get("/cors-test", func(c *fiber.Ctx) error {
+		origin := c.Get("Origin")
+		if isAllowedOrigin(origin) {
+			c.Set("Access-Control-Allow-Origin", origin)
+			c.Set("Access-Control-Allow-Credentials", "true")
+			existingVary := string(c.Response().Header.Peek("Vary"))
+			if !strings.Contains(existingVary, "Origin") {
+				if existingVary == "" {
+					c.Set("Vary", "Origin")
+				} else {
+					c.Set("Vary", existingVary+", Origin")
+				}
+			}
+		}
+		return c.SendString("cors ok")
+	})
 
 	// 🌐 Public Authentication Routes (No JWT Required)
 	log.Println("🌐 Configuring public auth routes...")
@@ -277,12 +298,12 @@ func main() {
 	// 👑 Admin Routes (JWT + Admin Role Required)
 	log.Println("👑 Configuring admin routes...")
 	adminRoutes := api.Group("/admin", middleware.JWTMiddleware(cfg), middleware.AdminMiddleware())
-	adminRoutes.Get("/users", authHandler.GetUsers)                              // 👥 List all users
-	adminRoutes.Post("/users", authHandler.CreateUser)                           // ➕ Create new user
-	adminRoutes.Get("/users/:id", authHandler.GetUserByID)                       // 👤 Get user by ID
-	adminRoutes.Put("/users/:id", authHandler.UpdateUser)                        // ✏️ Update user
-	adminRoutes.Delete("/users/:id", authHandler.DeleteUser)                     // 🗑️ Delete user
-	adminRoutes.Patch("/users/:id/status", authHandler.UpdateUserStatus)         // 🔄 Update user status
+	adminRoutes.Get("/users", authHandler.GetUsers)                                // 👥 List all users
+	adminRoutes.Post("/users", authHandler.CreateUser)                             // ➕ Create new user
+	adminRoutes.Get("/users/:id", authHandler.GetUserByID)                         // 👤 Get user by ID
+	adminRoutes.Put("/users/:id", authHandler.UpdateUser)                          // ✏️ Update user
+	adminRoutes.Delete("/users/:id", authHandler.DeleteUser)                       // 🗑️ Delete user
+	adminRoutes.Patch("/users/:id/status", authHandler.UpdateUserStatus)           // 🔄 Update user status
 	adminRoutes.Get("/permissions/available", authHandler.GetAvailablePermissions) // 📋 Get available permissions
 	adminRoutes.Put("/users/:id/permissions", authHandler.UpdateUserPermissions)   // 🔐 Update permissions
 	adminRoutes.Put("/users/:id/force-reset", authHandler.ForcePasswordReset)      // 🔒 Force password reset
@@ -326,13 +347,13 @@ func main() {
 		}
 
 		return c.JSON(fiber.Map{
-			"db_name":                 dbName,
-			"db_user":                 dbUser,
-			"search_path":            searchPath,
-			"to_regclass":            fiber.Map{"public.orders": publicOrders, "orders": unqualifiedOrders},
-			"gorm_migrations_count":  migrationsCount,
-			"gorm_migrations_error":  migrationsError,
-			"pgcrypto_installed":     pgcryptoInstalled,
+			"db_name":               dbName,
+			"db_user":               dbUser,
+			"search_path":           searchPath,
+			"to_regclass":           fiber.Map{"public.orders": publicOrders, "orders": unqualifiedOrders},
+			"gorm_migrations_count": migrationsCount,
+			"gorm_migrations_error": migrationsError,
+			"pgcrypto_installed":    pgcryptoInstalled,
 		})
 	})
 
@@ -393,7 +414,7 @@ func main() {
 	// 💳 Initialize Payments Repository and Client (service will be initialized after orders)
 	log.Println("💳 Setting up payments repository and client...")
 	paymentsRepo := payments.NewRepository(db)
-	
+
 	// Initialize Paystack client
 	paystackClient := payments.NewPaystackClient(cfg.PaystackSecretKey, cfg.PaystackWebhookSecret, cfg.AppBaseURL, cfg.CallbackURL)
 	log.Println("✅ Payments repository and client initialized")
@@ -416,13 +437,13 @@ func main() {
 	notificationHandler := notifications.NewNotificationHandler(notificationService)
 	notifications.SetupRoutes(app, cfg, notificationHandler)
 	notifications.SetupAdminRoutes(app, cfg, notificationHandler)
-	
+
 	// 🔥 Setup FCM Routes for Dashboard
 	log.Println("🔥 Setting up FCM routes for dashboard...")
 	notifications.SetupFCMRoutes(app, db, cfg)
 	notifications.SetupPublicFCMRoutes(app, db, cfg)
 	log.Println("✅ FCM routes initialized")
-	
+
 	log.Println("✅ Notifications domain initialized")
 
 	// 💬 Initialize Chat Domain
@@ -434,7 +455,7 @@ func main() {
 	// 📦 Initialize Orders Domain with Cart and Coupon Integration
 	log.Println("📦 Setting up orders domain with cart functionality...")
 	ordersRepo := orders.NewRepository(db)
-	
+
 	// 🎯 Initialize Custom Requests Domain (needed by orders)
 	log.Println("🎯 Setting up custom requests domain...")
 	customRequestsRepo := custom_requests.NewRepository(db)
@@ -444,7 +465,7 @@ func main() {
 	custom_requests.SetupAdminRoutes(adminRoutes, customRequestsHandler, cfg)
 	v1.MountCustomRequestRoutes(api, customRequestsHandler, middleware.JWTMiddleware(cfg), middleware.AdminMiddleware())
 	log.Println("✅ Custom requests domain initialized")
-	
+
 	// Initialize delivery costing functionality first (needed by orders)
 	log.Println("💰 Setting up delivery costing system...")
 	addressRepo := repos.NewDBAddressRepo(db)
@@ -457,27 +478,27 @@ func main() {
 		deliveryMatcher = deliveryHandler.GetMatcher()
 		log.Println("✅ Delivery costing system initialized")
 	}
-	
+
 	// Initialize delivery service (needed by orders)
 	deliveryRepo := delivery.NewDeliveryRepository(db)
 	deliveryService := delivery.NewDeliveryService(deliveryRepo, notificationService, ordersRepo, customersService)
-	
+
 	// Initialize orders service first (without payments service)
 	var ordersService *orders.Service
 	ordersService = orders.NewService(ordersRepo, productsRepo, couponsService, customersService, authService, &tempPaymentService{}, deliveryService, addressRepo, deliveryMatcher, notificationService, customRequestsService, db)
-	
+
 	// Now initialize payments service with orders service
 	paymentsService := payments.NewService(paymentsRepo, paystackClient, ordersService)
-	
+
 	// Update orders service with real payments service
 	ordersService = orders.NewService(ordersRepo, productsRepo, couponsService, customersService, authService, paymentsService, deliveryService, addressRepo, deliveryMatcher, notificationService, customRequestsService, db)
-	
+
 	// Setup payments routes
 	paymentsHandler := payments.NewHandler(paymentsService)
 	payments.SetupRoutes(app, cfg, paymentsHandler)
 	payments.SetupAdminRoutes(app, cfg, paymentsHandler)
 	log.Println("✅ Payments domain initialized with Paystack integration")
-	
+
 	// Setup orders routes
 	ordersHandler := orders.NewHandler(ordersService)
 	cartHandler := orders.NewCartHandler(ordersService)
@@ -505,8 +526,6 @@ func main() {
 	analyticsHandler := analytics.NewAnalyticsHandler(analyticsService)
 	analytics.SetupAnalyticsRoutes(app, analyticsHandler, cfg)
 	log.Println("✅ Analytics domain initialized")
-
-
 
 	// 👤 Old Users Domain - DISABLED (replaced by auth domain)
 	// The old users domain conflicts with the new auth domain

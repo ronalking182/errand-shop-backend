@@ -91,16 +91,30 @@ func (h *Handler) VerifyEmail(c *fiber.Ctx) error {
 	return presenter.OK(c, response, nil)
 }
 
-// RefreshToken handles token refresh
+// RefreshToken handles token refresh (Authorization: Bearer … or JSON { "refreshToken": "..." }).
 func (h *Handler) RefreshToken(c *fiber.Ctx) error {
-	refreshToken := c.Get("Authorization")
+	var refreshToken string
+
+	authHeader := strings.TrimSpace(c.Get("Authorization"))
+	if authHeader != "" {
+		fields := strings.Fields(authHeader)
+		if len(fields) == 2 && strings.EqualFold(fields[0], "Bearer") {
+			refreshToken = strings.TrimSpace(fields[1])
+		} else {
+			refreshToken = authHeader
+		}
+	}
+	if refreshToken == "" {
+		var req struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return presenter.Err(c, fiber.StatusBadRequest, "Refresh token required")
+		}
+		refreshToken = strings.TrimSpace(req.RefreshToken)
+	}
 	if refreshToken == "" {
 		return presenter.Err(c, fiber.StatusBadRequest, "Refresh token required")
-	}
-
-	// Remove "Bearer " prefix if present
-	if strings.HasPrefix(refreshToken, "Bearer ") {
-		refreshToken = strings.TrimPrefix(refreshToken, "Bearer ")
 	}
 
 	response, err := h.Service.RefreshToken(c.Context(), refreshToken)

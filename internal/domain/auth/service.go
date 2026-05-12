@@ -17,6 +17,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Matches jwt.GenerateToken access TTL (24h).
+const accessTokenExpiresInSeconds = int(24 * time.Hour / time.Second)
+
 // CustomerService interface for creating customer profiles
 type CustomerService interface {
 	CreateCustomer(req interface{}) (interface{}, error)
@@ -146,6 +149,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthRespo
 		User:         s.toUserResponse(user),
 		Token:        token,
 		RefreshToken: refreshToken,
+		ExpiresIn:    accessTokenExpiresInSeconds,
 	}, nil
 }
 
@@ -209,6 +213,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResponse, e
 		return &AuthResponse{
 			User:                 s.toUserResponse(user),
 			Token:                token,
+			ExpiresIn:            accessTokenExpiresInSeconds,
 			RequirePasswordReset: true,
 		}, nil
 	}
@@ -226,9 +231,22 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResponse, e
 		return nil, err
 	}
 
+	refreshToken, err := s.JWTService.GenerateRefreshToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	refreshTokenRecord := &RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshToken,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}
+	s.Repo.CreateRefreshToken(ctx, refreshTokenRecord)
+
 	return &AuthResponse{
-		User:  s.toUserResponse(user),
-		Token: token,
+		User:         s.toUserResponse(user),
+		Token:        token,
+		RefreshToken: refreshToken,
+		ExpiresIn:    accessTokenExpiresInSeconds,
 	}, nil
 }
 
@@ -349,6 +367,7 @@ func (s *Service) VerifyEmailWithCode(ctx context.Context, code string) (*AuthRe
 		User:         s.toUserResponse(user),
 		Token:        accessToken,
 		RefreshToken: refreshToken,
+		ExpiresIn:    accessTokenExpiresInSeconds,
 	}, nil
 }
 
@@ -406,6 +425,7 @@ func (s *Service) VerifyEmailWithOTP(ctx context.Context, email, otp string) (*A
 		User:         s.toUserResponse(user),
 		Token:        accessToken,
 		RefreshToken: refreshToken,
+		ExpiresIn:    accessTokenExpiresInSeconds,
 	}, nil
 }
 
@@ -448,6 +468,7 @@ func (s *Service) RefreshToken(ctx context.Context, refreshToken string) (*Refre
 	return &RefreshTokenResponse{
 		Token:        newToken,
 		RefreshToken: newRefreshToken,
+		ExpiresIn:    accessTokenExpiresInSeconds,
 	}, nil
 }
 

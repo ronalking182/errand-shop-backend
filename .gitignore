@@ -41,8 +41,7 @@ errand-shop-messaging-firebase-adminsdk-*.json
 # Build artifacts and temporary files
 tmp/
 main
-server
-!cmd/server/**
+/server
 errand-shop-backend
 *.log
 

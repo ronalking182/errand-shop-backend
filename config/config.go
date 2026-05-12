@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -49,9 +50,12 @@ func LoadConfig() *Config {
 		log.Printf("Warning: Error loading .env files: %v", err)
 	}
 
-	databaseUrl := os.Getenv("DATABASE")
+	databaseUrl := strings.TrimSpace(os.Getenv("DATABASE"))
 	if databaseUrl == "" {
-		log.Fatal("DATABASE environment variable is missing!")
+		databaseUrl = strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	}
+	if databaseUrl == "" {
+		log.Fatal("DATABASE or DATABASE_URL environment variable is missing!")
 	}
 
 	resendApiKey := os.Getenv("RESEND_API_KEY")

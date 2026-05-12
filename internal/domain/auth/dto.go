@@ -20,8 +20,9 @@ type RegisterRequest struct {
 type AuthResponse struct {
 	User                 UserResponse `json:"user"`
 	Token                string       `json:"token"`
-	RefreshToken         string       `json:"refreshToken"`
-	RequirePasswordReset bool         `json:"requirePasswordReset,omitempty"` // Add this line
+	RefreshToken         string       `json:"refreshToken,omitempty"`
+	ExpiresIn            int          `json:"expiresIn"`
+	RequirePasswordReset bool         `json:"requirePasswordReset,omitempty"`
 }
 
 type UserResponse struct {
@@ -63,6 +64,7 @@ type ResetPasswordRequest struct {
 type RefreshTokenResponse struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refreshToken"`
+	ExpiresIn    int    `json:"expiresIn"`
 }
 
 
