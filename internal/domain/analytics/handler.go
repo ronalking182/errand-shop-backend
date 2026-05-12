@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"log"
+	"strings"
 
 	"errandShop/internal/presenter"
 	"errandShop/internal/validation"
@@ -155,6 +156,7 @@ func (h *AnalyticsHandler) GetSalesOverviewEndpoint(c *fiber.Ctx) error {
 
 	overview, err := h.service.GetSalesOverviewData(period)
 	if err != nil {
+		log.Printf("GetSalesOverviewEndpoint(%s): %v", period, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"error":   "Failed to get sales overview",
@@ -172,6 +174,20 @@ func (h *AnalyticsHandler) GetDashboard(c *fiber.Ctx) error {
 	var req AnalyticsRequest
 	if err := c.QueryParser(&req); err != nil {
 		return presenter.ErrorResponse(c, fiber.StatusBadRequest, "Invalid request parameters")
+	}
+
+	// Older clients send ?period=daily|weekly|monthly|yearly instead of ?timeRange=...
+	if req.TimeRange == "" {
+		switch strings.ToLower(c.Query("period")) {
+		case "daily":
+			req.TimeRange = TimeRangeToday
+		case "weekly":
+			req.TimeRange = TimeRangeWeek
+		case "monthly":
+			req.TimeRange = TimeRangeMonth
+		case "yearly":
+			req.TimeRange = TimeRangeYear
+		}
 	}
 
 	if err := validation.ValidateStruct(&req); err != nil {

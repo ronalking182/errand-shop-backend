@@ -42,10 +42,10 @@ type AnalyticsEventRequest struct {
 }
 
 type AnalyticsRequest struct {
-	TimeRange TimeRange  `json:"timeRange" validate:"required,oneof=today week month quarter year custom"`
-	StartDate *time.Time `json:"startDate,omitempty"`
-	EndDate   *time.Time `json:"endDate,omitempty"`
-	StoreID   *uint      `json:"storeId,omitempty"`
+	TimeRange TimeRange  `query:"timeRange" json:"timeRange" validate:"required,oneof=today week month quarter year custom"`
+	StartDate *time.Time `query:"startDate" json:"startDate,omitempty"`
+	EndDate   *time.Time `query:"endDate" json:"endDate,omitempty"`
+	StoreID   *uint      `query:"storeId" json:"storeId,omitempty"`
 }
 
 type ReportRequest struct {
@@ -264,6 +264,28 @@ type LowStockAlertsData struct {
 type SalesOverviewResponse struct {
 	Success bool               `json:"success"`
 	Data    SalesOverviewChart `json:"data"`
+}
+
+// DashboardSalesOverviewPayload matches the dashboard SPA (snake_case) — HTTP handler returns this as JSON "data" only.
+type DashboardSalesOverviewPayload struct {
+	Period            string                           `json:"period"`
+	TotalSales        float64                          `json:"total_sales"`
+	TotalOrders       int64                            `json:"total_orders"`
+	AverageOrderValue float64                          `json:"average_order_value"`
+	SalesData         []DashboardSalesOverviewDailyRow `json:"sales_data"`
+	GrowthMetrics     DashboardSalesGrowthMetrics      `json:"growth_metrics"`
+}
+
+type DashboardSalesOverviewDailyRow struct {
+	Date   string  `json:"date"`
+	Sales  float64 `json:"sales"`
+	Orders int64   `json:"orders"`
+}
+
+type DashboardSalesGrowthMetrics struct {
+	SalesGrowth  float64 `json:"sales_growth"`
+	OrdersGrowth float64 `json:"orders_growth"`
+	AovGrowth    float64 `json:"aov_growth"`
 }
 
 type SalesOverviewChart struct {

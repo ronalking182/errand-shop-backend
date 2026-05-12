@@ -1,13 +1,13 @@
 package database
 
 import (
-    "log"
-    "time"
-    "database/sql"
+	"database/sql"
+	"log"
+	"time"
 
-    "gorm.io/driver/postgres"
-    "gorm.io/gorm"
-    "gorm.io/gorm/logger"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // DB is the global database connection instance
@@ -20,11 +20,13 @@ var DB *gorm.DB
 // Returns:
 //   - *gorm.DB: The database connection instance
 func ConnectDB(dsn string) *gorm.DB {
-    var err error
+	var err error
 
-    // =============================================
-    // DATABASE CONNECTION SETUP
-    // =============================================
+	// =============================================
+	// DATABASE CONNECTION SETUP
+	// =============================================
+	dsn = PostgresDSNWithPoolerCompat(dsn)
+	log.Printf("ℹ️ postgres PreferSimpleProtocol=%v (set PG_USE_SIMPLE_PROTOCOL=false to disable)", PreferSimpleProtocolEnabled())
 
 	// Configure GORM for optimal performance
 	gormConfig := &gorm.Config{
@@ -33,9 +35,15 @@ func ConnectDB(dsn string) *gorm.DB {
 		Logger:                 logger.Default.LogMode(logger.Warn), // Only log warnings and errors
 	}
 
+	// PreferSimpleProtocol avoids prepared-statement clashes with poolers (e.g. PgBouncer / some cloud proxies).
+	pgCfg := postgres.Config{
+		DSN:                  dsn,
+		PreferSimpleProtocol: PreferSimpleProtocolEnabled(),
+	}
+
 	// Establish database connection with retry logic
 	for i := 0; i < 3; i++ {
-		DB, err = gorm.Open(postgres.Open(dsn), gormConfig)
+		DB, err = gorm.Open(postgres.New(pgCfg), gormConfig)
 		if err == nil {
 			break
 		}
@@ -56,72 +64,85 @@ func ConnectDB(dsn string) *gorm.DB {
 		log.Fatal("Failed to get underlying DB instance:", err)
 	}
 
-    // Configure connection pool settings
-    sqlDB.SetMaxIdleConns(10)           // Maximum idle connections
-    sqlDB.SetMaxOpenConns(100)          // Maximum open connections
-    sqlDB.SetConnMaxLifetime(time.Hour) // Maximum connection lifetime
+	// Configure connection pool settings
+	sqlDB.SetMaxIdleConns(10)           // Maximum idle connections
+	sqlDB.SetMaxOpenConns(100)          // Maximum open connections
+	sqlDB.SetConnMaxLifetime(time.Hour) // Maximum connection lifetime
 
-    // =============================================
-    // DB INTROSPECTION (diagnostics)
-    // =============================================
-    // Log current database, user, and search_path to aid triage in production
-    func() {
-        // current_database(), current_user
-        var currentDB, currentUser string
-        row := DB.Raw("select current_database(), current_user").Row()
-        if err := row.Scan(&currentDB, &currentUser); err == nil {
-            log.Printf("ℹ️ Connected to DB='%s' as user='%s'", currentDB, currentUser)
-        } else {
-            log.Printf("⚠️ Failed to read current_database/current_user: %v", err)
-        }
+	// =============================================
+	// DB INTROSPECTION (diagnostics)
+	// =============================================
+	// Log current database, user, and search_path to aid triage in production
+	func() {
+		// current_database(), current_user
+		var currentDB, currentUser string
+		row := DB.Raw("select current_database(), current_user").Row()
+		if err := row.Scan(&currentDB, &currentUser); err == nil {
+			log.Printf("ℹ️ Connected to DB='%s' as user='%s'", currentDB, currentUser)
+		} else {
+			log.Printf("⚠️ Failed to read current_database/current_user: %v", err)
+		}
 
-        // search_path
-        var searchPath string
-        row = DB.Raw("show search_path").Row()
-        if err := row.Scan(&searchPath); err == nil {
-            log.Printf("ℹ️ search_path='%s'", searchPath)
-        } else {
-            log.Printf("⚠️ Failed to read search_path: %v", err)
-        }
+		// search_path
+		var searchPath string
+		row = DB.Raw("show search_path").Row()
+		if err := row.Scan(&searchPath); err == nil {
+			log.Printf("ℹ️ search_path='%s'", searchPath)
+		} else {
+			log.Printf("⚠️ Failed to read search_path: %v", err)
+		}
 
-        // Check orders table visibility (public and default schema resolution)
-        var publicOrders, defaultOrders sql.NullString
-        row = DB.Raw("select to_regclass('public.orders'), to_regclass('orders')").Row()
-        if err := row.Scan(&publicOrders, &defaultOrders); err == nil {
-            log.Printf("ℹ️ to_regclass public.orders='%v', orders='%v'", publicOrders.String, defaultOrders.String)
-        } else {
-            log.Printf("⚠️ Failed to check to_regclass for orders: %v", err)
-        }
+		// Check orders table visibility (public and default schema resolution)
+		var publicOrders, defaultOrders sql.NullString
+		row = DB.Raw("select to_regclass('public.orders'), to_regclass('orders')").Row()
+		if err := row.Scan(&publicOrders, &defaultOrders); err == nil {
+			log.Printf("ℹ️ to_regclass public.orders='%v', orders='%v'", publicOrders.String, defaultOrders.String)
+		} else {
+			log.Printf("⚠️ Failed to check to_regclass for orders: %v", err)
+		}
 
-        // Check categories table visibility (public and default schema resolution)
-        var publicCategories, defaultCategories sql.NullString
-        row = DB.Raw("select to_regclass('public.categories'), to_regclass('categories')").Row()
-        if err := row.Scan(&publicCategories, &defaultCategories); err == nil {
-            log.Printf("ℹ️ to_regclass public.categories='%v', categories='%v'", publicCategories.String, defaultCategories.String)
-        } else {
-            log.Printf("⚠️ Failed to check to_regclass for categories: %v", err)
-        }
+		// Check categories table visibility (public and default schema resolution)
+		var publicCategories, defaultCategories sql.NullString
+		row = DB.Raw("select to_regclass('public.categories'), to_regclass('categories')").Row()
+		if err := row.Scan(&publicCategories, &defaultCategories); err == nil {
+			log.Printf("ℹ️ to_regclass public.categories='%v', categories='%v'", publicCategories.String, defaultCategories.String)
+		} else {
+			log.Printf("⚠️ Failed to check to_regclass for categories: %v", err)
+		}
 
-        // Count applied gorm migrations (table name: gorm_migrations)
-        var migCount int
-        if err := DB.Raw("select count(*) from gorm_migrations").Scan(&migCount).Error; err == nil {
-            log.Printf("ℹ️ gorm_migrations count=%d", migCount)
-        } else {
-            log.Printf("⚠️ gorm_migrations table not readable: %v", err)
-        }
-    }()
+		// go-gormigrate uses table name "migrations" by default
+		var migCount int
+		if err := DB.Raw("SELECT COUNT(*) FROM migrations").Scan(&migCount).Error; err == nil {
+			log.Printf("ℹ️ migrations rows=%d", migCount)
+		} else {
+			log.Printf("ℹ️ migrations table not readable yet (normal on first boot): %v", err)
+		}
+	}()
 
-    // =============================================
-    // MIGRATION EXECUTION
-    // =============================================
+	// =============================================
+	// MIGRATION EXECUTION
+	// =============================================
 
-    // Run database migrations
-    if err := RunMigrations(DB); err != nil {
-        log.Fatal("Database migrations failed:", err)
-    }
+	// Run database migrations
+	if err := RunMigrations(DB); err != nil {
+		log.Fatal("Database migrations failed:", err)
+	}
 
-    log.Println("✅ Database connection established and migrations completed")
-    return DB
+	if err := EnsureCoreOrdersTables(DB); err != nil {
+		log.Fatal("Failed to ensure orders schema:", err)
+	}
+
+	// Confirm orders resolved after migrations + ensure step
+	func() {
+		var publicOrders sql.NullString
+		row := DB.Raw("SELECT to_regclass('public.orders')::text").Row()
+		if err := row.Scan(&publicOrders); err == nil {
+			log.Printf("ℹ️ after migrate+ensure: public.orders=%q", publicOrders.String)
+		}
+	}()
+
+	log.Println("✅ Database connection established and migrations completed")
+	return DB
 }
 
 // PingDB checks if the database connection is alive

@@ -11,6 +11,7 @@ import (
 	"errandShop/internal/domain/products"
 	"errandShop/internal/pkg/models"
 	"errandShop/internal/services/audit"
+	"fmt"
 	"log"
 	"time"
 
@@ -26,7 +27,7 @@ type MigrationStatus struct {
 
 // Initialize all migrations
 func getMigrations() []*gormigrate.Migration {
-    return []*gormigrate.Migration{
+	return []*gormigrate.Migration{
 		// Initial migration (v1)
 		{
 			ID: "0001_initial",
@@ -40,11 +41,11 @@ func getMigrations() []*gormigrate.Migration {
 			},
 			Rollback: func(tx *gorm.DB) error {
 				return tx.Migrator().DropTable(
-				&models.RefreshToken{},
-				&models.Address{},
-				&models.OTP{},
-				&models.User{},
-			)
+					&models.RefreshToken{},
+					&models.Address{},
+					&models.OTP{},
+					&models.User{},
+				)
 			},
 		},
 		// Add permissions column migration
@@ -110,7 +111,7 @@ func getMigrations() []*gormigrate.Migration {
 			ID: "0005_add_products_module",
 			Migrate: func(tx *gorm.DB) error {
 				log.Println("Adding products, categories, and stock_history tables...")
-				
+
 				// Check if products table exists and has data
 				if tx.Migrator().HasTable(&products.Product{}) {
 					log.Println("Products table exists, dropping and recreating...")
@@ -119,7 +120,7 @@ func getMigrations() []*gormigrate.Migration {
 						return err
 					}
 				}
-				
+
 				// Create all tables with proper constraints
 				return tx.AutoMigrate(
 					&products.Product{},
@@ -142,7 +143,7 @@ func getMigrations() []*gormigrate.Migration {
 			ID: "0006_add_orders_module",
 			Migrate: func(tx *gorm.DB) error {
 				log.Println("Adding orders and order_items tables...")
-				
+
 				// Check if order_items table exists and drop it to avoid type conflicts
 				if tx.Migrator().HasTable(&orders.OrderItem{}) {
 					log.Println("Order items table exists, dropping and recreating...")
@@ -150,7 +151,7 @@ func getMigrations() []*gormigrate.Migration {
 						return err
 					}
 				}
-				
+
 				// Check if orders table exists and drop it to avoid conflicts
 				if tx.Migrator().HasTable(&orders.Order{}) {
 					log.Println("Orders table exists, dropping and recreating...")
@@ -158,7 +159,7 @@ func getMigrations() []*gormigrate.Migration {
 						return err
 					}
 				}
-				
+
 				return tx.AutoMigrate(
 					&orders.Order{},
 					&orders.OrderItem{},
@@ -402,311 +403,344 @@ func getMigrations() []*gormigrate.Migration {
 			},
 		},
 
-        {
-            ID: "0019_fix_orders_module_create_missing_tables",
-            Migrate: func(tx *gorm.DB) error {
-                log.Println("Ensuring orders tables exist (non-destructive AutoMigrate)...")
-                // Minimum set
-                if err := tx.AutoMigrate(
-                    &orders.Order{},
-                    &orders.OrderItem{},
-                ); err != nil {
-                    return err
-                }
+		{
+			ID: "0019_fix_orders_module_create_missing_tables",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Ensuring orders tables exist (non-destructive AutoMigrate)...")
+				// Minimum set
+				if err := tx.AutoMigrate(
+					&orders.Order{},
+					&orders.OrderItem{},
+				); err != nil {
+					return err
+				}
 
-                // Optional extras — include ONLY if these types exist in the codebase:
-                // These structs exist in the codebase, so ensure their tables too
-                _ = tx.AutoMigrate(&orders.Cart{})
-                _ = tx.AutoMigrate(&orders.CartItem{})
-                _ = tx.AutoMigrate(&orders.OrderStatusHistory{})
+				// Optional extras — include ONLY if these types exist in the codebase:
+				// These structs exist in the codebase, so ensure their tables too
+				_ = tx.AutoMigrate(&orders.Cart{})
+				_ = tx.AutoMigrate(&orders.CartItem{})
+				_ = tx.AutoMigrate(&orders.OrderStatusHistory{})
 
-                return nil
-            },
-            Rollback: func(tx *gorm.DB) error {
-                log.Println("Rollback skipped for 0019 (no destructive changes).")
-                return nil
-            },
-        },
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0019 (no destructive changes).")
+				return nil
+			},
+		},
 
-        // Seed superadmin: Errandshop3js@gmail.com (one-time, idempotent)
-        {
-            ID: "0020_seed_superadmin_errandshop3js",
-            Migrate: func(tx *gorm.DB) error {
-                log.Println("Seeding superadmin user: Errandshop3js@gmail.com ...")
+		// Seed superadmin: Errandshop3js@gmail.com (one-time, idempotent)
+		{
+			ID: "0020_seed_superadmin_errandshop3js",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Seeding superadmin user: Errandshop3js@gmail.com ...")
 
-                // Check if the user already exists
-                var count int64
-                if err := tx.Model(&models.User{}).
-                    Where("email = ?", "Errandshop3js@gmail.com").
-                    Count(&count).Error; err != nil {
-                    return err
-                }
+				// Check if the user already exists
+				var count int64
+				if err := tx.Model(&models.User{}).
+					Where("email = ?", "Errandshop3js@gmail.com").
+					Count(&count).Error; err != nil {
+					return err
+				}
 
-                if count > 0 {
-                    log.Println("Superadmin already exists, skipping seed.")
-                    return nil
-                }
+				if count > 0 {
+					log.Println("Superadmin already exists, skipping seed.")
+					return nil
+				}
 
-                // Create the superadmin (password hashed by BeforeCreate hook)
-                user := &models.User{
-                    FirstName:   "Michelle",
-                    LastName:    "Onwuaso",
-                    Name:        "Michelle Onwuaso",
-                    Email:       "Errandshop3js@gmail.com",
-                    Password:    "Admin123!",
-                    Phone:       "08144611443",
-                    Role:        "superadmin",
-                    Permissions: []string{"*"},
-                    Status:      "active",
-                    IsVerified:  true,
-                    ForceReset:  false,
-                    CreatedAt:   time.Now(),
-                    UpdatedAt:   time.Now(),
-                }
+				// Create the superadmin (password hashed by BeforeCreate hook)
+				user := &models.User{
+					FirstName:   "Michelle",
+					LastName:    "Onwuaso",
+					Name:        "Michelle Onwuaso",
+					Email:       "Errandshop3js@gmail.com",
+					Password:    "Admin123!",
+					Phone:       "08144611443",
+					Role:        "superadmin",
+					Permissions: []string{"*"},
+					Status:      "active",
+					IsVerified:  true,
+					ForceReset:  false,
+					CreatedAt:   time.Now(),
+					UpdatedAt:   time.Now(),
+				}
 
-                if err := tx.Create(user).Error; err != nil {
-                    return err
-                }
+				if err := tx.Create(user).Error; err != nil {
+					return err
+				}
 
-                log.Println("✅ Superadmin seeded: Errandshop3js@gmail.com")
-                return nil
-            },
-            Rollback: func(tx *gorm.DB) error {
-                log.Println("Removing seeded superadmin: Errandshop3js@gmail.com ...")
-                return tx.Where("email = ?", "Errandshop3js@gmail.com").Delete(&models.User{}).Error
-            },
-        },
-        // Enforce case-insensitive uniqueness on email and dedupe existing
-        {
-            ID: "0021_enforce_unique_lower_email",
-            Migrate: func(tx *gorm.DB) error {
-                log.Println("🔧 Preparing to normalize emails and dedupe by LOWER(email)...")
+				log.Println("✅ Superadmin seeded: Errandshop3js@gmail.com")
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Removing seeded superadmin: Errandshop3js@gmail.com ...")
+				return tx.Where("email = ?", "Errandshop3js@gmail.com").Delete(&models.User{}).Error
+			},
+		},
+		// Enforce case-insensitive uniqueness on email and dedupe existing
+		{
+			ID: "0021_enforce_unique_lower_email",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("🔧 Preparing to normalize emails and dedupe by LOWER(email)...")
 
-                // Ensure gorm migrations bookkeeping table exists if queried elsewhere
-                if err := tx.Exec(`CREATE TABLE IF NOT EXISTS gorm_migrations (
+				// Ensure gorm migrations bookkeeping table exists if queried elsewhere
+				if err := tx.Exec(`CREATE TABLE IF NOT EXISTS gorm_migrations (
                     id SERIAL PRIMARY KEY,
                     migration_id TEXT UNIQUE,
                     applied_at TIMESTAMPTZ DEFAULT now()
                 )`).Error; err != nil {
-                    log.Printf("⚠️ Failed to ensure gorm_migrations table: %v", err)
-                }
+					log.Printf("⚠️ Failed to ensure gorm_migrations table: %v", err)
+				}
 
-                // Ensure base tables/columns exist before custom SQL
-                if err := tx.AutoMigrate(
-                    &models.User{},
-                    &models.OTP{},
-                    &models.Address{},
-                    &models.RefreshToken{},
-                ); err != nil {
-                    return err
-                }
+				// Ensure base tables/columns exist before custom SQL
+				if err := tx.AutoMigrate(
+					&models.User{},
+					&models.OTP{},
+					&models.Address{},
+					&models.RefreshToken{},
+				); err != nil {
+					return err
+				}
 
-                // Wrap normalization, dedupe, and index creation in a transaction
-                return tx.Transaction(func(tx *gorm.DB) error {
-                    // Drop any legacy case-sensitive unique constraint/index on users.email
-                    if err := tx.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS uni_users_email").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop legacy constraint uni_users_email: %v", err)
-                    }
-                    if err := tx.Exec("DROP INDEX IF EXISTS uni_users_email").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop legacy index uni_users_email: %v", err)
-                    }
-                    // Common default names created by Postgres/GORM
-                    if err := tx.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop default constraint users_email_key: %v", err)
-                    }
-                    if err := tx.Exec("DROP INDEX IF EXISTS idx_users_email").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop default index idx_users_email: %v", err)
-                    }
+				// Wrap normalization, dedupe, and index creation in a transaction
+				return tx.Transaction(func(tx *gorm.DB) error {
+					// Drop any legacy case-sensitive unique constraint/index on users.email
+					if err := tx.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS uni_users_email").Error; err != nil {
+						log.Printf("⚠️ Failed to drop legacy constraint uni_users_email: %v", err)
+					}
+					if err := tx.Exec("DROP INDEX IF EXISTS uni_users_email").Error; err != nil {
+						log.Printf("⚠️ Failed to drop legacy index uni_users_email: %v", err)
+					}
+					// Common default names created by Postgres/GORM
+					if err := tx.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key").Error; err != nil {
+						log.Printf("⚠️ Failed to drop default constraint users_email_key: %v", err)
+					}
+					if err := tx.Exec("DROP INDEX IF EXISTS idx_users_email").Error; err != nil {
+						log.Printf("⚠️ Failed to drop default index idx_users_email: %v", err)
+					}
 
-                    // Log current duplicate groups count (case-insensitive)
-                    var dupGroups int
-                    countSQL := `SELECT COUNT(*) FROM (
+					// Log current duplicate groups count (case-insensitive)
+					var dupGroups int
+					countSQL := `SELECT COUNT(*) FROM (
                         SELECT LOWER(email) AS e, COUNT(*) AS c
                         FROM users
                         WHERE email IS NOT NULL
                         GROUP BY 1
                         HAVING COUNT(*) > 1
                     ) d;`
-                    if err := tx.Raw(countSQL).Scan(&dupGroups).Error; err == nil {
-                        if dupGroups > 0 {
-                            log.Printf("🔎 Found %d case-insensitive duplicate email groups", dupGroups)
-                        } else {
-                            log.Println("✅ No case-insensitive duplicate email groups detected")
-                        }
-                    } else {
-                        log.Printf("⚠️ Failed counting duplicate email groups: %v", err)
-                    }
+					if err := tx.Raw(countSQL).Scan(&dupGroups).Error; err == nil {
+						if dupGroups > 0 {
+							log.Printf("🔎 Found %d case-insensitive duplicate email groups", dupGroups)
+						} else {
+							log.Println("✅ No case-insensitive duplicate email groups detected")
+						}
+					} else {
+						log.Printf("⚠️ Failed counting duplicate email groups: %v", err)
+					}
 
-                    // Normalize emails to LOWER(TRIM(email))
-                    normalizeSQL := `UPDATE users SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL;`
-                    if err := tx.Exec(normalizeSQL).Error; err != nil {
-                        log.Printf("⚠️ Email normalization failed: %v", err)
-                        // Continue; dedupe may still succeed depending on state
-                    }
+					// Normalize emails to LOWER(TRIM(email))
+					normalizeSQL := `UPDATE users SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL;`
+					if err := tx.Exec(normalizeSQL).Error; err != nil {
+						log.Printf("⚠️ Email normalization failed: %v", err)
+						// Continue; dedupe may still succeed depending on state
+					}
 
-                    // Keep oldest row per lower(email) via DISTINCT ON
-                    keepSQL := `CREATE TEMP TABLE users_keep AS
+					// Keep oldest row per lower(email) via DISTINCT ON
+					keepSQL := `CREATE TEMP TABLE users_keep AS
                         SELECT DISTINCT ON (LOWER(email))
                                id,
                                LOWER(email) AS email_lower
                         FROM users
                         WHERE email IS NOT NULL
                         ORDER BY LOWER(email), created_at ASC, id ASC;`
-                    if err := tx.Exec(keepSQL).Error; err != nil {
-                        log.Printf("⚠️ Failed to create users_keep: %v", err)
-                        return err
-                    }
+					if err := tx.Exec(keepSQL).Error; err != nil {
+						log.Printf("⚠️ Failed to create users_keep: %v", err)
+						return err
+					}
 
-                    // Map duplicates to keeper
-                    dupsSQL := `CREATE TEMP TABLE users_dups AS
+					// Map duplicates to keeper
+					dupsSQL := `CREATE TEMP TABLE users_dups AS
                         SELECT u.id AS dup_id,
                                k.id AS keep_id
                         FROM users u
                         JOIN users_keep k ON LOWER(u.email) = k.email_lower
                         WHERE u.id <> k.id;`
-                    if err := tx.Exec(dupsSQL).Error; err != nil {
-                        log.Printf("⚠️ Failed to create users_dups: %v", err)
-                        return err
-                    }
+					if err := tx.Exec(dupsSQL).Error; err != nil {
+						log.Printf("⚠️ Failed to create users_dups: %v", err)
+						return err
+					}
 
-                    // Reassign child rows (otps.user_id) to the keeper to prevent FK violations
-                    reassignSQL := `UPDATE otps o
+					// Reassign child rows (otps.user_id) to the keeper to prevent FK violations
+					reassignSQL := `UPDATE otps o
                         SET user_id = d.keep_id
                         FROM users_dups d
                         WHERE o.user_id = d.dup_id;`
-                    res := tx.Exec(reassignSQL)
-                    if res.Error != nil {
-                        log.Printf("⚠️ Failed to reassign OTPs to keeper users: %v", res.Error)
-                        return res.Error
-                    }
-                    log.Printf("🔧 Reassigned %d OTP rows from duplicate users", res.RowsAffected)
+					res := tx.Exec(reassignSQL)
+					if res.Error != nil {
+						log.Printf("⚠️ Failed to reassign OTPs to keeper users: %v", res.Error)
+						return res.Error
+					}
+					log.Printf("🔧 Reassigned %d OTP rows from duplicate users", res.RowsAffected)
 
-                    // Optional hardening: make otps.user_id FK ON DELETE CASCADE
-                    if err := tx.Exec("ALTER TABLE otps DROP CONSTRAINT IF EXISTS fk_users_ot_ps").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop FK fk_users_ot_ps: %v", err)
-                    }
-                    if err := tx.Exec("ALTER TABLE otps DROP CONSTRAINT IF EXISTS otps_user_id_fkey").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop default FK otps_user_id_fkey: %v", err)
-                    }
-                    if err := tx.Exec("ALTER TABLE otps ADD CONSTRAINT fk_users_ot_ps FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE").Error; err != nil {
-                        log.Printf("⚠️ Failed to add ON DELETE CASCADE FK for otps.user_id: %v", err)
-                    } else {
-                        log.Println("✅ Ensured otps.user_id FK uses ON DELETE CASCADE")
-                    }
+					// Optional hardening: make otps.user_id FK ON DELETE CASCADE
+					if err := tx.Exec("ALTER TABLE otps DROP CONSTRAINT IF EXISTS fk_users_ot_ps").Error; err != nil {
+						log.Printf("⚠️ Failed to drop FK fk_users_ot_ps: %v", err)
+					}
+					if err := tx.Exec("ALTER TABLE otps DROP CONSTRAINT IF EXISTS otps_user_id_fkey").Error; err != nil {
+						log.Printf("⚠️ Failed to drop default FK otps_user_id_fkey: %v", err)
+					}
+					if err := tx.Exec("ALTER TABLE otps ADD CONSTRAINT fk_users_ot_ps FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE").Error; err != nil {
+						log.Printf("⚠️ Failed to add ON DELETE CASCADE FK for otps.user_id: %v", err)
+					} else {
+						log.Println("✅ Ensured otps.user_id FK uses ON DELETE CASCADE")
+					}
 
-                    // Delete duplicate users using mapping table
-                    deleteSQL := `DELETE FROM users u
+					// Delete duplicate users using mapping table
+					deleteSQL := `DELETE FROM users u
                         USING users_dups d
                         WHERE u.id = d.dup_id;`
-                    if err := tx.Exec(deleteSQL).Error; err != nil {
-                        log.Printf("⚠️ Failed to delete duplicate users: %v", err)
-                        return err
-                    }
+					if err := tx.Exec(deleteSQL).Error; err != nil {
+						log.Printf("⚠️ Failed to delete duplicate users: %v", err)
+						return err
+					}
 
-                    // Recreate case-insensitive unique index on LOWER(email)
-                    if err := tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error; err != nil {
-                        log.Printf("⚠️ Failed to drop idx_users_email_lower_unique: %v", err)
-                    }
-                    indexSQL := `CREATE UNIQUE INDEX idx_users_email_lower_unique ON users (LOWER(email));`
-                    if err := tx.Exec(indexSQL).Error; err != nil {
-                        log.Printf("⚠️ Failed to create unique index on LOWER(email): %v", err)
-                        return err
-                    }
+					// Recreate case-insensitive unique index on LOWER(email)
+					if err := tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error; err != nil {
+						log.Printf("⚠️ Failed to drop idx_users_email_lower_unique: %v", err)
+					}
+					indexSQL := `CREATE UNIQUE INDEX idx_users_email_lower_unique ON users (LOWER(email));`
+					if err := tx.Exec(indexSQL).Error; err != nil {
+						log.Printf("⚠️ Failed to create unique index on LOWER(email): %v", err)
+						return err
+					}
 
-                    log.Println("✅ Reassigned otps, deleted duplicates, and enforced unique LOWER(email)")
-                    return nil
-                })
-            },
-            Rollback: func(tx *gorm.DB) error {
-                log.Println("↩️ Dropping unique index on lower(email)...")
-                return tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error
-            },
-        },
-        {
-            ID: "0022_ensure_products_categories_tables",
-            Migrate: func(tx *gorm.DB) error {
-                log.Println("Ensuring products, categories, and stock_history tables exist (idempotent)...")
-                return tx.AutoMigrate(
-                    &products.Category{},
-                    &products.Product{},
-                    &products.StockHistory{},
-                )
-            },
-            Rollback: func(tx *gorm.DB) error {
-                log.Println("Rollback skipped for 0022 (no destructive changes).")
-                return nil
-            },
-        },
-        {
-            ID: "0023_seed_default_categories",
-            Migrate: func(tx *gorm.DB) error {
-                log.Println("Seeding default product categories (idempotent)...")
-                names := []string{
-                    "Condiments",
-                    "Oils",
-                    "Pap and purees",
-                    "Proteins",
-                    "Tubers",
-                    "Grains and Staples",
-                    "Vegetables",
-                    "Fresh produce",
-                    "Pepper mix",
-                    "Fruits",
-                    "Provisions",
-                    "Detergent and Laundry",
-                }
-                for _, name := range names {
-                    if err := tx.Exec("INSERT INTO categories (name, description, is_active, created_at, updated_at) VALUES (?, '', TRUE, NOW(), NOW()) ON CONFLICT (name) DO NOTHING", name).Error; err != nil {
-                        log.Printf("Failed to insert category %s: %v", name, err)
-                        return err
-                    }
-                }
-                log.Println("✅ Default categories seeded (existing preserved)")
-                return nil
-            },
-            Rollback: func(tx *gorm.DB) error {
-                log.Println("Removing seeded default product categories...")
-                // Safe rollback: delete only the seeded names
-                return tx.Exec("DELETE FROM categories WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
-            },
-        },
-        {
-            ID: "0024_update_category_descriptions",
-            Migrate: func(tx *gorm.DB) error {
-                log.Println("Updating default product category descriptions (idempotent upsert)...")
-                type pair struct{ Name, Desc string }
-                items := []pair{
-                    {"Condiments", "Sauces, spices, dressings, and seasonings"},
-                    {"Oils", "Cooking oils and sprays"},
-                    {"Pap and purees", "Pap, baby food, purees, and cereal blends"},
-                    {"Proteins", "Meat, fish, eggs, and plant proteins"},
-                    {"Tubers", "Yams, potatoes, cassava, and other root crops"},
-                    {"Grains and Staples", "Rice, pasta, flour, cereals, and staple foods"},
-                    {"Vegetables", "Leafy greens, root vegetables, and mixed veg"},
-                    {"Fresh produce", "Fresh fruits and vegetables"},
-                    {"Pepper mix", "Blended peppers, sauces, and spice mixes"},
-                    {"Fruits", "Fresh and packaged fruits"},
-                    {"Provisions", "Pantry essentials and dry goods"},
-                    {"Detergent and Laundry", "Detergents, soaps, and laundry supplies"},
-                }
-                for _, it := range items {
-                    if err := tx.Exec(
-                        "INSERT INTO categories (name, description, is_active, created_at, updated_at) VALUES (?, ?, TRUE, NOW(), NOW()) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = NOW()",
-                        it.Name, it.Desc,
-                    ).Error; err != nil {
-                        log.Printf("Failed to upsert category %s: %v", it.Name, err)
-                        return err
-                    }
-                }
-                log.Println("✅ Category descriptions updated (and seeded if missing)")
-                return nil
-            },
-            Rollback: func(tx *gorm.DB) error {
-                log.Println("Clearing descriptions for default product categories (rollback)...")
-                return tx.Exec("UPDATE categories SET description = '' WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
-            },
-        },
-    }
+					log.Println("✅ Reassigned otps, deleted duplicates, and enforced unique LOWER(email)")
+					return nil
+				})
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("↩️ Dropping unique index on lower(email)...")
+				return tx.Exec("DROP INDEX IF EXISTS idx_users_email_lower_unique").Error
+			},
+		},
+		{
+			ID: "0022_ensure_products_categories_tables",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Ensuring products, categories, and stock_history tables exist (idempotent)...")
+				return tx.AutoMigrate(
+					&products.Category{},
+					&products.Product{},
+					&products.StockHistory{},
+				)
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0022 (no destructive changes).")
+				return nil
+			},
+		},
+		{
+			ID: "0023_seed_default_categories",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Seeding default product categories (idempotent)...")
+				names := []string{
+					"Condiments",
+					"Oils",
+					"Pap and purees",
+					"Proteins",
+					"Tubers",
+					"Grains and Staples",
+					"Vegetables",
+					"Fresh produce",
+					"Pepper mix",
+					"Fruits",
+					"Provisions",
+					"Detergent and Laundry",
+				}
+				for _, name := range names {
+					if err := tx.Exec("INSERT INTO categories (name, description, is_active, created_at, updated_at) VALUES (?, '', TRUE, NOW(), NOW()) ON CONFLICT (name) DO NOTHING", name).Error; err != nil {
+						log.Printf("Failed to insert category %s: %v", name, err)
+						return err
+					}
+				}
+				log.Println("✅ Default categories seeded (existing preserved)")
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Removing seeded default product categories...")
+				// Safe rollback: delete only the seeded names
+				return tx.Exec("DELETE FROM categories WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
+			},
+		},
+		{
+			ID: "0024_update_category_descriptions",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Updating default product category descriptions (idempotent upsert)...")
+				type pair struct{ Name, Desc string }
+				items := []pair{
+					{"Condiments", "Sauces, spices, dressings, and seasonings"},
+					{"Oils", "Cooking oils and sprays"},
+					{"Pap and purees", "Pap, baby food, purees, and cereal blends"},
+					{"Proteins", "Meat, fish, eggs, and plant proteins"},
+					{"Tubers", "Yams, potatoes, cassava, and other root crops"},
+					{"Grains and Staples", "Rice, pasta, flour, cereals, and staple foods"},
+					{"Vegetables", "Leafy greens, root vegetables, and mixed veg"},
+					{"Fresh produce", "Fresh fruits and vegetables"},
+					{"Pepper mix", "Blended peppers, sauces, and spice mixes"},
+					{"Fruits", "Fresh and packaged fruits"},
+					{"Provisions", "Pantry essentials and dry goods"},
+					{"Detergent and Laundry", "Detergents, soaps, and laundry supplies"},
+				}
+				for _, it := range items {
+					if err := tx.Exec(
+						"INSERT INTO categories (name, description, is_active, created_at, updated_at) VALUES (?, ?, TRUE, NOW(), NOW()) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = NOW()",
+						it.Name, it.Desc,
+					).Error; err != nil {
+						log.Printf("Failed to upsert category %s: %v", it.Name, err)
+						return err
+					}
+				}
+				log.Println("✅ Category descriptions updated (and seeded if missing)")
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Clearing descriptions for default product categories (rollback)...")
+				return tx.Exec("UPDATE categories SET description = '' WHERE name IN ('Condiments','Oils','Pap and purees','Proteins','Tubers','Grains and Staples','Vegetables','Fresh produce','Pepper mix','Fruits','Provisions','Detergent and Laundry')").Error
+			},
+		},
+		// Repair: DBs created when InitSchema ran inserted all migration IDs without executing
+		// Migrate() functions, so core tables (orders) were never created. Run idempotent AutoMigrate.
+		{
+			ID: "0025_ensure_orders_tables",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Repair: ensuring orders, order_items and related order tables (idempotent AutoMigrate)...")
+				if err := tx.AutoMigrate(
+					&orders.Order{},
+					&orders.OrderItem{},
+				); err != nil {
+					return err
+				}
+				_ = tx.AutoMigrate(&orders.Cart{}, &orders.CartItem{}, &orders.OrderStatusHistory{})
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0025 (no destructive changes).")
+				return nil
+			},
+		},
+	}
+}
+
+// EnsureCoreOrdersTables creates order-related tables via AutoMigrate even when migration bookkeeping
+// is wrong (e.g. legacy InitSchema inserted all IDs without running Migrate()) or migrations were skipped.
+func EnsureCoreOrdersTables(db *gorm.DB) error {
+	log.Println("ensure: syncing orders/order_items carts (AutoMigrate)...")
+	if err := db.AutoMigrate(&orders.Order{}, &orders.OrderItem{}); err != nil {
+		return fmt.Errorf("ensure orders core tables: %w", err)
+	}
+	if err := db.AutoMigrate(&orders.Cart{}, &orders.CartItem{}, &orders.OrderStatusHistory{}); err != nil {
+		return fmt.Errorf("ensure orders auxiliary tables: %w", err)
+	}
+	return nil
 }
 
 // Run all pending migrations
@@ -717,18 +751,9 @@ func RunMigrations(db *gorm.DB) error {
 		getMigrations(),
 	)
 
-	// Initialize the migration table if not exists
-	m.InitSchema(func(tx *gorm.DB) error {
-		log.Println("Initializing database schema...")
-		// Create initial tables with proper UUID support
-		return tx.AutoMigrate(
-			&models.User{},
-			&models.OTP{},
-			&models.Address{},
-			&models.RefreshToken{},
-		)
-	})
-
+	// Do NOT use InitSchema: on a fresh DB it only runs the bootstrap callback, then inserts
+	// every migration ID as already applied without executing Migrate() for 0002+ — leaving
+	// tables like orders missing. See gormigrate.runInitSchema().
 	return m.Migrate()
 }
 

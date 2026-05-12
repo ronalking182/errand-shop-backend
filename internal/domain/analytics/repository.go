@@ -35,6 +35,8 @@ type AnalyticsRepository interface {
 
 	// Reports methods
 	GetSalesOverview(startDate, endDate time.Time, period string) (*SalesOverviewData, error)
+	GetRevenueAndOrderTotals(startDate, endDate time.Time) (revenue float64, orderCount int64, err error)
+
 	GetTopProductsReport(startDate, endDate time.Time, limit int) ([]TopProduct, error)
 	GetCouponPerformance(startDate, endDate time.Time) ([]CouponPerformance, error)
 	GetStorePerformance(startDate, endDate time.Time) ([]StorePerformance, error)
@@ -220,7 +222,7 @@ func (r *analyticsRepository) GetRevenueByDay(startDate, endDate time.Time) ([]D
 	var dataPoints []DataPoint
 
 	if err := r.db.Table("orders").
-		Select("DATE(created_at) as date, COALESCE(SUM(total_amount), 0) as value").
+		Select("DATE(created_at) AS date, COALESCE(SUM(total_amount), 0) AS value, COUNT(*) AS count").
 		Where("status IN ?", revenueOrderStatuses).
 		Where("created_at BETWEEN ? AND ?", startDate, endDate).
 		Group("DATE(created_at)").
@@ -234,6 +236,22 @@ func (r *analyticsRepository) GetRevenueByDay(startDate, endDate time.Time) ([]D
 	}
 
 	return dataPoints, nil
+}
+
+func (r *analyticsRepository) GetRevenueAndOrderTotals(startDate, endDate time.Time) (float64, int64, error) {
+	type row struct {
+		TotalKobo float64 `gorm:"column:total"`
+		N         int64   `gorm:"column:n"`
+	}
+	var out row
+	if err := r.db.Table("orders").
+		Select("COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS n").
+		Where("status IN ?", revenueOrderStatuses).
+		Where("created_at BETWEEN ? AND ?", startDate, endDate).
+		Scan(&out).Error; err != nil {
+		return 0, 0, err
+	}
+	return out.TotalKobo / 100.0, out.N, nil
 }
 
 func (r *analyticsRepository) GetTopProducts(startDate, endDate time.Time, limit int) ([]ProductSales, error) {
@@ -328,7 +346,6 @@ func (r *analyticsRepository) GetDashboardKPIs(startDate, endDate time.Time) (*D
 	kpis.ActiveUsers = activeUsers
 
 	if err := r.db.Table("products").
-		Where("deleted_at IS NULL").
 		Where("is_active = ?", true).
 		Count(&kpis.TotalProducts).Error; err != nil {
 		return nil, err
@@ -395,7 +412,6 @@ func (r *analyticsRepository) GetLowStockProducts(threshold int) ([]LowStockProd
 
 	err := r.db.Table("products").
 		Select("id::text AS id, COALESCE(TRIM(name), '') AS name, COALESCE(TRIM(sku), '') AS sku, stock_quantity AS current_stock").
-		Where("deleted_at IS NULL").
 		Where("stock_quantity <= ? AND is_active = ?", threshold, true).
 		Order("stock_quantity ASC").
 		Scan(&products).Error

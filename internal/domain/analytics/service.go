@@ -16,7 +16,7 @@ type AnalyticsService interface {
 	GetCouponsAnalytics() (*CouponsAnalyticsResponse, error)
 	GetRecentOrdersData(limit int) (*RecentOrdersResponse, error)
 	GetLowStockAlerts(threshold int) (*LowStockAlertsResponse, error)
-	GetSalesOverviewData(period string) (*SalesOverviewResponse, error)
+	GetSalesOverviewData(period string) (*DashboardSalesOverviewPayload, error)
 	
 	// New reports endpoints
 	GetSalesReport(req *ReportRequest) (*SalesReportResponse, error)
@@ -447,54 +447,87 @@ func (s *analyticsService) GetLowStockAlerts(threshold int) (*LowStockAlertsResp
 	}, nil
 }
 
-func (s *analyticsService) GetSalesOverviewData(period string) (*SalesOverviewResponse, error) {
+func (s *analyticsService) GetSalesOverviewData(period string) (*DashboardSalesOverviewPayload, error) {
 	now := time.Now()
 
-	// Get sales overview data
 	var startDate time.Time
 	switch period {
 	case "daily":
-		startDate = now.AddDate(0, 0, -7) // Last 7 days
+		startDate = now.AddDate(0, 0, -7) // aligns with SPA "Last 7 days" when mapped to weekly
 	case "weekly":
-		startDate = now.AddDate(0, 0, -28) // Last 4 weeks
+		startDate = now.AddDate(0, 0, -28)
 	case "monthly":
-		startDate = now.AddDate(0, -12, 0) // Last 12 months
+		startDate = now.AddDate(0, -12, 0)
 	default:
-		startDate = now.AddDate(0, 0, -7) // Default to daily
+		startDate = now.AddDate(0, 0, -7)
 		period = "daily"
 	}
 
-	_, err := s.repo.GetSalesOverview(startDate, now, period)
+	totalSales, totalOrders, err := s.repo.GetRevenueAndOrderTotals(startDate, now)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sales overview: %w", err)
+		return nil, fmt.Errorf("failed to get sales totals: %w", err)
 	}
 
-	// Convert to chart data format
-	chartData := []ChartPoint{}
-	// This would need to be implemented based on the actual data structure returned
-	// For now, we'll return empty chart data
-
-	// Calculate totals and averages
-	metrics, err := s.repo.GetDashboardKPIs(startDate, now)
+	points, err := s.repo.GetRevenueByDay(startDate, now)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get metrics for sales overview: %w", err)
+		return nil, fmt.Errorf("failed to get revenue by day: %w", err)
 	}
 
-	averageOrder := 0.0
-	if metrics.ActiveUsers > 0 {
-		averageOrder = metrics.TotalSales / float64(metrics.ActiveUsers)
+	salesData := make([]DashboardSalesOverviewDailyRow, len(points))
+	for i, p := range points {
+		d := p.Date.UTC()
+		if d.IsZero() {
+			salesData[i] = DashboardSalesOverviewDailyRow{Date: "", Sales: p.Value, Orders: p.Count}
+			continue
+		}
+		salesData[i] = DashboardSalesOverviewDailyRow{
+			Date:   d.Format(time.RFC3339),
+			Sales:  p.Value,
+			Orders: p.Count,
+		}
 	}
 
-	return &SalesOverviewResponse{
-		Success: true,
-		Data: SalesOverviewChart{
-			Period:       period,
-			ChartData:    chartData,
-			TotalRevenue: metrics.TotalSales,
-			TotalOrders:  metrics.ActiveUsers, // Using active users as proxy for orders
-			AverageOrder: averageOrder,
-			GrowthRate:   0.0, // Would need previous period data to calculate
-			LastUpdated:  now.Format(time.RFC3339),
+	duration := now.Sub(startDate)
+	prevEnd := startDate
+	prevStart := startDate.Add(-duration)
+
+	prevSales, prevOrders, err := s.repo.GetRevenueAndOrderTotals(prevStart, prevEnd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get previous-period sales: %w", err)
+	}
+
+	aov := 0.0
+	if totalOrders > 0 {
+		aov = totalSales / float64(totalOrders)
+	}
+	prevAOV := 0.0
+	if prevOrders > 0 {
+		prevAOV = prevSales / float64(prevOrders)
+	}
+
+	salesGrowth := 0.0
+	if prevSales > 0 {
+		salesGrowth = (totalSales - prevSales) / prevSales * 100
+	}
+	ordersGrowth := 0.0
+	if prevOrders > 0 {
+		ordersGrowth = float64(totalOrders-prevOrders) / float64(prevOrders) * 100
+	}
+	aovGrowth := 0.0
+	if prevAOV > 0 {
+		aovGrowth = (aov - prevAOV) / prevAOV * 100
+	}
+
+	return &DashboardSalesOverviewPayload{
+		Period:            period,
+		TotalSales:        totalSales,
+		TotalOrders:       totalOrders,
+		AverageOrderValue: aov,
+		SalesData:         salesData,
+		GrowthMetrics: DashboardSalesGrowthMetrics{
+			SalesGrowth:  salesGrowth,
+			OrdersGrowth: ordersGrowth,
+			AovGrowth:    aovGrowth,
 		},
 	}, nil
 }
