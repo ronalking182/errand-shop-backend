@@ -25,6 +25,33 @@ type MigrationStatus struct {
 	Pending   bool      `json:"pending"`
 }
 
+// EnsureMinimalDashboardTables creates dashboard-dependent tables via AutoMigrate even when migration
+// bookkeeping is inconsistent (fresh repair after InitSchema bugs). Matches analytics expectations:
+// customers (recent orders LEFT JOIN), products (KPIs + low stock), coupons (KPI issued count), orders.
+func EnsureMinimalDashboardTables(db *gorm.DB) error {
+	log.Println("ensure: syncing customers, products, coupons, orders (minimal dashboard schema)...")
+
+	if err := db.AutoMigrate(&customers.Customer{}, &customers.Address{}); err != nil {
+		return fmt.Errorf("ensure customers: %w", err)
+	}
+	if err := db.AutoMigrate(&products.Category{}, &products.Product{}, &products.StockHistory{}); err != nil {
+		return fmt.Errorf("ensure products: %w", err)
+	}
+	if err := db.AutoMigrate(&coupons.Coupon{}, &coupons.CouponUsage{}, &coupons.UserRefundCredit{}); err != nil {
+		return fmt.Errorf("ensure coupons: %w", err)
+	}
+	if err := db.AutoMigrate(
+		&orders.Order{},
+		&orders.OrderItem{},
+		&orders.Cart{},
+		&orders.CartItem{},
+		&orders.OrderStatusHistory{},
+	); err != nil {
+		return fmt.Errorf("ensure orders: %w", err)
+	}
+	return nil
+}
+
 // Initialize all migrations
 func getMigrations() []*gormigrate.Migration {
 	return []*gormigrate.Migration{
@@ -727,23 +754,20 @@ func getMigrations() []*gormigrate.Migration {
 				return nil
 			},
 		},
+		{
+			ID: "0026_ensure_customers_products_coupons_for_dashboard",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Repair 0026: customers/products/coupons for dashboard KPIs & recent orders...")
+				return EnsureMinimalDashboardTables(tx)
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0026 (no destructive changes).")
+				return nil
+			},
+		},
 	}
 }
 
-// EnsureCoreOrdersTables creates order-related tables via AutoMigrate even when migration bookkeeping
-// is wrong (e.g. legacy InitSchema inserted all IDs without running Migrate()) or migrations were skipped.
-func EnsureCoreOrdersTables(db *gorm.DB) error {
-	log.Println("ensure: syncing orders/order_items carts (AutoMigrate)...")
-	if err := db.AutoMigrate(&orders.Order{}, &orders.OrderItem{}); err != nil {
-		return fmt.Errorf("ensure orders core tables: %w", err)
-	}
-	if err := db.AutoMigrate(&orders.Cart{}, &orders.CartItem{}, &orders.OrderStatusHistory{}); err != nil {
-		return fmt.Errorf("ensure orders auxiliary tables: %w", err)
-	}
-	return nil
-}
-
-// Run all pending migrations
 func RunMigrations(db *gorm.DB) error {
 	m := gormigrate.New(
 		db,

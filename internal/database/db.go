@@ -128,8 +128,8 @@ func ConnectDB(dsn string) *gorm.DB {
 		log.Fatal("Database migrations failed:", err)
 	}
 
-	if err := EnsureCoreOrdersTables(DB); err != nil {
-		log.Fatal("Failed to ensure orders schema:", err)
+	if err := EnsureMinimalDashboardTables(DB); err != nil {
+		log.Fatal("Failed to ensure dashboard schema:", err)
 	}
 
 	// Confirm orders resolved after migrations + ensure step

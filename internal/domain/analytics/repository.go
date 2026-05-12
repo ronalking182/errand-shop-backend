@@ -348,7 +348,7 @@ func (r *analyticsRepository) GetDashboardKPIs(startDate, endDate time.Time) (*D
 	if err := r.db.Table("products").
 		Where("is_active = ?", true).
 		Count(&kpis.TotalProducts).Error; err != nil {
-		return nil, err
+		kpis.TotalProducts = 0
 	}
 
 	if err := r.db.Table("coupons").
