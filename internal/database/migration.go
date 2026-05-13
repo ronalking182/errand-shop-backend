@@ -493,7 +493,7 @@ func getMigrations() []*gormigrate.Migration {
 					LastName:    "Onwuaso",
 					Name:        "Michelle Onwuaso",
 					Email:       "Errandshop3js@gmail.com",
-					Password:    "Admin123!",
+					Password:    "ErrandShop3js@2024",
 					Phone:       "08144611443",
 					Role:        "superadmin",
 					Permissions: []string{"*"},
@@ -807,6 +807,35 @@ func getMigrations() []*gormigrate.Migration {
 			},
 			Rollback: func(tx *gorm.DB) error {
 				log.Println("Rollback skipped for 0031 (no destructive changes).")
+				return nil
+			},
+		},
+		// Refresh superadmin password for Errandshop3js@gmail.com (0020 skips if row exists; bcrypt cost 10)
+		{
+			ID: "0032_superadmin_errandshop3js_password_refresh",
+			Migrate: func(tx *gorm.DB) error {
+				const bcryptHash = "$2a$10$xhayU0wMYxN4nBHkau6QTuiRHIpWGQcZz/LFcHtqYlEglK6eRim.y"
+				const email = "Errandshop3js@gmail.com"
+				log.Printf("0032: updating password + superadmin flags for %s (if row exists)...", email)
+				res := tx.Exec(`
+UPDATE users
+SET password = ?, role = 'superadmin', status = 'active', is_verified = true,
+    updated_at = NOW(), force_reset = false
+WHERE lower(email) = lower(?)`,
+					bcryptHash, email,
+				)
+				if res.Error != nil {
+					return res.Error
+				}
+				if res.RowsAffected == 0 {
+					log.Printf("0032: no user with email %s — skipping (create via migration 0020 or register)", email)
+				} else {
+					log.Println("✅ 0032: superadmin row updated")
+				}
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0032 (cannot restore previous password hash).")
 				return nil
 			},
 		},
