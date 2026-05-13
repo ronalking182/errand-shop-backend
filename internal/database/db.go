@@ -110,6 +110,14 @@ func ConnectDB(dsn string) *gorm.DB {
 			log.Printf("⚠️ Failed to check to_regclass for categories: %v", err)
 		}
 
+		var publicCustomReq sql.NullString
+		row = DB.Raw(`SELECT to_regclass('public.custom_requests')::text`).Row()
+		if err := row.Scan(&publicCustomReq); err == nil {
+			log.Printf(`ℹ️ to_regclass public.custom_requests=%q`, publicCustomReq.String)
+		} else {
+			log.Printf("⚠️ Failed to_regclass custom_requests: %v", err)
+		}
+
 		// go-gormigrate uses table name "migrations" by default
 		var migCount int
 		if err := DB.Raw("SELECT COUNT(*) FROM migrations").Scan(&migCount).Error; err == nil {
@@ -132,12 +140,23 @@ func ConnectDB(dsn string) *gorm.DB {
 		log.Fatal("Failed to ensure dashboard schema:", err)
 	}
 
+	if err := RepairCustomRequestsIfMissing(DB); err != nil {
+		log.Fatal("custom_requests verification/repair failed:", err)
+	}
+
 	// Confirm orders resolved after migrations + ensure step
 	func() {
 		var publicOrders sql.NullString
 		row := DB.Raw("SELECT to_regclass('public.orders')::text").Row()
 		if err := row.Scan(&publicOrders); err == nil {
 			log.Printf("ℹ️ after migrate+ensure: public.orders=%q", publicOrders.String)
+		}
+	}()
+	func() {
+		var cr sql.NullString
+		row := DB.Raw(`SELECT to_regclass('public.custom_requests')::text`).Row()
+		if err := row.Scan(&cr); err == nil {
+			log.Printf("ℹ️ after migrate+ensure+repair: public.custom_requests=%q", cr.String)
 		}
 	}()
 

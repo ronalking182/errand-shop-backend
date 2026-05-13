@@ -27,9 +27,15 @@ type MigrationStatus struct {
 
 // EnsureMinimalDashboardTables creates dashboard-dependent tables via AutoMigrate even when migration
 // bookkeeping is inconsistent (fresh repair after InitSchema bugs). Matches analytics expectations:
-// customers (recent orders LEFT JOIN), products (KPIs + low stock), coupons (KPI issued count), orders.
+// customers (recent orders LEFT JOIN), products (KPIs + low stock), coupons (KPI issued count), orders,
+// custom_requests (admin list), chat_rooms/messages.
 func EnsureMinimalDashboardTables(db *gorm.DB) error {
-	log.Println("ensure: syncing customers, products, coupons, orders (minimal dashboard schema)...")
+	log.Println("ensure: dashboard schema (customers, products, coupons, orders, custom_requests, chat)...")
+
+	// UUID defaults use gen_random_uuid(); extension may be missing on fresh Postgres.
+	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
+		log.Printf("ensure: CREATE EXTENSION pgcrypto skipped or failed (may already exist or need superuser): %v", err)
+	}
 
 	if err := db.AutoMigrate(&customers.Customer{}, &customers.Address{}); err != nil {
 		return fmt.Errorf("ensure customers: %w", err)
@@ -48,6 +54,12 @@ func EnsureMinimalDashboardTables(db *gorm.DB) error {
 		&orders.OrderStatusHistory{},
 	); err != nil {
 		return fmt.Errorf("ensure orders: %w", err)
+	}
+	if err := EnsureCustomRequestsStack(db); err != nil {
+		return fmt.Errorf("ensure custom_requests: %w", err)
+	}
+	if err := db.AutoMigrate(&chat.ChatRoom{}, &chat.ChatMessage{}); err != nil {
+		return fmt.Errorf("ensure chat: %w", err)
 	}
 	return nil
 }
@@ -765,6 +777,39 @@ func getMigrations() []*gormigrate.Migration {
 				return nil
 			},
 		},
+		{
+			ID: "0027_ensure_custom_requests_and_chat_tables",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Repair 0027: custom_requests + chat tables (idempotent)...")
+				return EnsureMinimalDashboardTables(tx)
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0027 (no destructive changes).")
+				return nil
+			},
+		},
+		{
+			ID: "0028_ensure_dashboard_tables_recorded",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("Repair 0028: idempotent dashboard schema (same as ensure step on boot)...")
+				return EnsureMinimalDashboardTables(tx)
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0028 (no destructive changes).")
+				return nil
+			},
+		},
+		{
+			ID: "0031_explicit_custom_requests_stack",
+			Migrate: func(tx *gorm.DB) error {
+				log.Println("0031: explicit custom_requests stack (idempotent)...")
+				return EnsureCustomRequestsStack(tx)
+			},
+			Rollback: func(tx *gorm.DB) error {
+				log.Println("Rollback skipped for 0031 (no destructive changes).")
+				return nil
+			},
+		},
 	}
 }
 
@@ -778,7 +823,11 @@ func RunMigrations(db *gorm.DB) error {
 	// Do NOT use InitSchema: on a fresh DB it only runs the bootstrap callback, then inserts
 	// every migration ID as already applied without executing Migrate() for 0002+ — leaving
 	// tables like orders missing. See gormigrate.runInitSchema().
-	return m.Migrate()
+	if err := m.Migrate(); err != nil {
+		return err
+	}
+	// Idempotent: guarantees custom_requests / chat / etc. exist even if an older binary skipped ConnectDB ensure.
+	return EnsureMinimalDashboardTables(db)
 }
 
 // Rollback the last migration
