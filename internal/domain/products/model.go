@@ -3,7 +3,6 @@ package products
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"errors"
 	"time"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -27,14 +26,29 @@ func (s *StringSlice) Scan(value interface{}) error {
 		return nil
 	}
 
+	var raw []byte
 	switch v := value.(type) {
 	case []byte:
-		return json.Unmarshal(v, s)
+		raw = v
 	case string:
-		return json.Unmarshal([]byte(v), s)
+		raw = []byte(v)
 	default:
-		return errors.New("cannot scan into StringSlice")
+		// Unexpected driver type — avoid failing whole product/category queries.
+		*s = StringSlice{}
+		return nil
 	}
+	if len(raw) == 0 {
+		*s = StringSlice{}
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		// Legacy or hand-edited JSONB (non-array) would break listing APIs with 500.
+		*s = StringSlice{}
+		return nil
+	}
+	*s = out
+	return nil
 }
 
 // Product represents a product in the system
